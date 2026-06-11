@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { BRAND_IMAGES } from '@/lib/data'
@@ -13,6 +13,12 @@ export default function LandingPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('pending') === '1') setError('O seu acesso ainda está a aguardar aprovação pela equipa BOD.')
+    if (params.get('error') === '1')   setError('Erro ao verificar acesso. Tente novamente.')
+  }, [])
 
   // Request form
   const [req, setReq] = useState({ optica_name: '', contact_name: '', email: '', phone: '', city: '', message: '' })
