@@ -4,26 +4,24 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { BRAND_IMAGES } from '@/lib/data'
-import { Mail, ArrowRight, CheckCircle, Eye, BarChart2, Calculator, Users } from 'lucide-react'
+import { Mail, ArrowRight, CheckCircle, Calculator, BarChart2, Eye, Users } from 'lucide-react'
 
 type View = 'login' | 'request' | 'sent'
 
 export default function LandingPage() {
-  const [view, setView] = useState<View>('login')
-  const [email, setEmail] = useState('')
+  const [view, setView]       = useState<View>('login')
+  const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
+  const [req, setReq]         = useState({ optica_name: '', contact_name: '', email: '', phone: '', city: '', message: '' })
+  const [reqLoading, setReqLoading] = useState(false)
+  const [reqDone, setReqDone]       = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('pending') === '1') setError('O seu acesso ainda está a aguardar aprovação pela equipa BOD.')
     if (params.get('error') === '1')   setError('Erro ao verificar acesso. Tente novamente.')
   }, [])
-
-  // Request form
-  const [req, setReq] = useState({ optica_name: '', contact_name: '', email: '', phone: '', city: '', message: '' })
-  const [reqLoading, setReqLoading] = useState(false)
-  const [reqDone, setReqDone] = useState(false)
 
   const sendMagicLink = async () => {
     if (!email) { setError('Indique o seu email.'); return }
@@ -33,8 +31,8 @@ export default function LandingPage() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback`, shouldCreateUser: false },
     })
     setLoading(false)
-    if (err) { setError('Email não encontrado ou sem acesso aprovado.') }
-    else { setView('sent') }
+    if (err) setError('Email não encontrado ou sem acesso aprovado.')
+    else setView('sent')
   }
 
   const submitRequest = async () => {
@@ -42,96 +40,133 @@ export default function LandingPage() {
     setReqLoading(true); setError('')
     const { error: err } = await supabase.from('access_requests').insert([req])
     setReqLoading(false)
-    if (err) { setError('Erro ao enviar. Tente novamente.') }
-    else { setReqDone(true) }
+    if (err) setError('Erro ao enviar. Tente novamente.')
+    else setReqDone(true)
   }
 
+  const features = [
+    { icon: Calculator, label: 'Calculadora de preços' },
+    { icon: BarChart2,  label: 'Dashboard de margens' },
+    { icon: Eye,        label: 'Catálogo completo' },
+    { icon: Users,      label: 'Apoio dedicado 24/7' },
+  ]
+
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      {/* LEFT — brand panel */}
-      <div className="relative hidden md:flex md:w-1/2 flex-col justify-between bg-bod-dark p-10 overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row bg-white">
+
+      {/* ── LEFT PANEL — visible desktop, hero strip mobile ── */}
+      <div className="relative md:w-[52%] md:min-h-screen flex-shrink-0 overflow-hidden">
+        {/* Background image */}
         <div className="absolute inset-0">
-          <Image src={BRAND_IMAGES.lenses} alt="" fill className="object-cover opacity-15" />
-          <div className="absolute inset-0 bg-gradient-to-br from-bod-dark via-bod-dark/95 to-bod-blue/30" />
+          <Image src={BRAND_IMAGES.lenses} alt="" fill className="object-cover" priority />
+          <div className="absolute inset-0 bg-gradient-to-br from-bod-dark/97 via-bod-dark/90 to-bod-blue/70" />
         </div>
-        <div className="relative">
-          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={140} height={38} className="h-8 w-auto brightness-0 invert" />
+
+        {/* Mobile: compact hero strip */}
+        <div className="relative md:hidden flex items-center justify-between px-5 py-5">
+          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={110} height={30}
+            className="h-7 w-auto brightness-0 invert" />
+          <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Portal Parceiros</span>
         </div>
-        <div className="relative space-y-8">
-          <div>
-            <h1 className="font-display text-4xl font-bold text-white leading-tight mb-3">
-              Portal exclusivo<br /><span className="text-bod-sky">para óticas parceiras.</span>
-            </h1>
-            <p className="text-white/50 text-base leading-relaxed max-w-sm">
-              Aceda à calculadora de preços, dashboard de margens, perfil da ótica e canal direto com a BOD Lenses.
-            </p>
+
+        {/* Desktop: full brand panel */}
+        <div className="relative hidden md:flex flex-col justify-between h-full p-10 min-h-screen">
+          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={140} height={38}
+            className="h-8 w-auto brightness-0 invert" />
+
+          <div className="space-y-8">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-bod-sky mb-4">Portal exclusivo</p>
+              <h1 className="font-display text-4xl font-bold text-white leading-tight mb-4">
+                A sua ótica,<br /><span className="text-bod-sky">a sua vantagem.</span>
+              </h1>
+              <p className="text-white/50 text-base leading-relaxed max-w-sm">
+                Aceda à calculadora de preços, dashboard de margens e canal direto com a equipa BOD Lenses.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {features.map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3.5 hover:bg-white/8 transition-colors">
+                  <Icon size={15} className="text-bod-sky shrink-0" />
+                  <span className="text-xs text-white/70 font-medium leading-tight">{label}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { icon: Calculator, label: 'Calculadora de preços' },
-              { icon: BarChart2,  label: 'Dashboard de margens' },
-              { icon: Eye,        label: 'Catálogo completo' },
-              { icon: Users,      label: 'Apoio dedicado 24/7' },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3">
-                <Icon size={16} className="text-bod-sky shrink-0" />
-                <span className="text-xs text-white/70 font-medium">{label}</span>
-              </div>
-            ))}
-          </div>
+
+          <p className="text-xs text-white/20">© 2026 BOD Lenses Portugal</p>
         </div>
-        <div className="relative text-xs text-white/25">© 2026 BOD Lenses Portugal</div>
       </div>
 
-      {/* RIGHT — auth panel */}
-      <div className="flex-1 flex flex-col justify-center px-6 py-12 md:px-12 bg-white min-h-screen md:min-h-0">
-        {/* Mobile logo */}
-        <div className="flex justify-center mb-8 md:hidden">
-          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={130} height={36} className="h-8 w-auto" />
-        </div>
-
-        <div className="max-w-sm w-full mx-auto">
+      {/* ── RIGHT PANEL — auth forms ── */}
+      <div className="flex-1 flex flex-col justify-center px-5 py-10 md:px-12 bg-white">
+        <div className="w-full max-w-sm mx-auto">
 
           {/* LOGIN */}
           {view === 'login' && (
-            <>
-              <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Entrar</h2>
-              <p className="text-sm text-gray-400 mb-8">Enviamos um link de acesso para o seu email.</p>
-              <div className="space-y-4">
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Bem-vindo</h2>
+                <p className="text-sm text-gray-400">Enviamos um link de acesso para o seu email.</p>
+              </div>
+
+              <div className="space-y-3">
                 <div>
                   <label className="label">Email da ótica</label>
-                  <input type="email" className="input" placeholder="email@otica.pt"
+                  <input type="email" className="input text-base" placeholder="email@otica.pt"
                     value={email} onChange={e => setEmail(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && sendMagicLink()} />
                 </div>
-                {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
-                <button className="btn-primary w-full py-3" onClick={sendMagicLink} disabled={loading}>
-                  <Mail size={16} />
+                {error && (
+                  <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                    <p className="text-xs text-red-600 font-medium leading-relaxed">{error}</p>
+                  </div>
+                )}
+                <button className="btn-primary w-full py-3.5 text-base" onClick={sendMagicLink} disabled={loading}>
+                  <Mail size={17} />
                   {loading ? 'A enviar...' : 'Enviar link de acesso'}
                 </button>
               </div>
-              <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                <p className="text-sm text-gray-400 mb-3">Ainda não é parceiro BOD?</p>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-100" /></div>
+                <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-gray-300 font-medium">ou</span></div>
+              </div>
+
+              <div className="space-y-2 text-center">
+                <p className="text-sm text-gray-400">Ainda não é parceiro BOD?</p>
                 <button className="btn-outline w-full py-3" onClick={() => { setView('request'); setError('') }}>
-                  Solicitar acesso
-                  <ArrowRight size={15} />
+                  Solicitar acesso <ArrowRight size={15} />
                 </button>
               </div>
-            </>
+
+              {/* Mobile features */}
+              <div className="md:hidden grid grid-cols-2 gap-2 pt-2">
+                {features.map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex items-center gap-2 bg-bod-xlight rounded-xl p-3">
+                    <Icon size={14} className="text-bod-blue shrink-0" />
+                    <span className="text-xs text-gray-500 font-medium leading-tight">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* SENT */}
           {view === 'sent' && (
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <div className="text-center space-y-5">
+              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto">
                 <CheckCircle size={32} className="text-green-600" />
               </div>
-              <h2 className="font-display text-2xl font-bold text-bod-dark mb-2">Verifique o seu email</h2>
-              <p className="text-gray-400 text-sm leading-relaxed mb-6">
-                Enviámos um link de acesso para <strong className="text-bod-dark">{email}</strong>.<br />
-                Clique no link para entrar — é válido por 1 hora.
-              </p>
-              <button className="text-sm text-bod-blue font-medium hover:underline" onClick={() => setView('login')}>
+              <div>
+                <h2 className="font-display text-2xl font-bold text-bod-dark mb-2">Verifique o seu email</h2>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Enviámos um link de acesso para<br />
+                  <strong className="text-bod-dark">{email}</strong>.<br /><br />
+                  Clique no link para entrar — é válido por 1 hora.
+                </p>
+              </div>
+              <button className="text-sm text-bod-blue font-semibold hover:underline" onClick={() => setView('login')}>
                 ← Usar outro email
               </button>
             </div>
@@ -141,68 +176,78 @@ export default function LandingPage() {
           {view === 'request' && (
             <>
               {reqDone ? (
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-bod-light rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-bod-light rounded-2xl flex items-center justify-center mx-auto">
                     <CheckCircle size={32} className="text-bod-blue" />
                   </div>
-                  <h2 className="font-display text-xl font-bold text-bod-dark mb-2">Pedido recebido!</h2>
-                  <p className="text-gray-400 text-sm leading-relaxed">
-                    A equipa BOD irá analisar o seu pedido e entrará em contacto nas próximas 24–48h.
-                  </p>
+                  <div>
+                    <h2 className="font-display text-xl font-bold text-bod-dark mb-2">Pedido recebido!</h2>
+                    <p className="text-gray-400 text-sm leading-relaxed">
+                      A equipa BOD irá analisar o seu pedido e entrará em contacto nas próximas 24–48h.
+                    </p>
+                  </div>
+                  <button className="text-sm text-bod-blue font-semibold hover:underline" onClick={() => setView('login')}>
+                    ← Voltar ao login
+                  </button>
                 </div>
               ) : (
-                <>
-                  <button className="text-sm text-gray-400 hover:text-bod-blue mb-6 flex items-center gap-1"
-                    onClick={() => { setView('login'); setError('') }}>
-                    ← Voltar
-                  </button>
-                  <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Solicitar acesso</h2>
-                  <p className="text-sm text-gray-400 mb-7">A BOD irá analisar e aprovar o seu pedido.</p>
+                <div className="space-y-5">
+                  <div>
+                    <button className="text-sm text-gray-400 hover:text-bod-blue flex items-center gap-1 mb-4"
+                      onClick={() => { setView('login'); setError('') }}>
+                      ← Voltar
+                    </button>
+                    <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Solicitar acesso</h2>
+                    <p className="text-sm text-gray-400">A BOD irá analisar e aprovar o seu pedido em 24–48h.</p>
+                  </div>
+
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label">Nome da ótica *</label>
-                        <input className="input" placeholder="Ótica Exemplo"
-                          value={req.optica_name} onChange={e => setReq(p => ({ ...p, optica_name: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="label">Nome do responsável *</label>
-                        <input className="input" placeholder="João Silva"
-                          value={req.contact_name} onChange={e => setReq(p => ({ ...p, contact_name: e.target.value }))} />
-                      </div>
+                    <div>
+                      <label className="label">Nome da ótica *</label>
+                      <input className="input text-base" placeholder="Ótica Exemplo"
+                        value={req.optica_name} onChange={e => setReq(p => ({ ...p, optica_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Nome do responsável *</label>
+                      <input className="input text-base" placeholder="João Silva"
+                        value={req.contact_name} onChange={e => setReq(p => ({ ...p, contact_name: e.target.value }))} />
                     </div>
                     <div>
                       <label className="label">Email *</label>
-                      <input type="email" className="input" placeholder="email@otica.pt"
+                      <input type="email" className="input text-base" placeholder="email@otica.pt"
                         value={req.email} onChange={e => setReq(p => ({ ...p, email: e.target.value }))} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Telefone</label>
-                        <input className="input" placeholder="+351 9XX XXX XXX"
+                        <input className="input text-base" placeholder="+351 9XX"
                           value={req.phone} onChange={e => setReq(p => ({ ...p, phone: e.target.value }))} />
                       </div>
                       <div>
                         <label className="label">Cidade</label>
-                        <input className="input" placeholder="Lisboa"
+                        <input className="input text-base" placeholder="Lisboa"
                           value={req.city} onChange={e => setReq(p => ({ ...p, city: e.target.value }))} />
                       </div>
                     </div>
                     <div>
                       <label className="label">Mensagem (opcional)</label>
-                      <textarea className="input resize-none" rows={3} placeholder="Conte-nos sobre a sua ótica..."
+                      <textarea className="input resize-none text-base" rows={3} placeholder="Conte-nos sobre a sua ótica..."
                         value={req.message} onChange={e => setReq(p => ({ ...p, message: e.target.value }))} />
                     </div>
-                    {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
-                    <button className="btn-primary w-full py-3" onClick={submitRequest} disabled={reqLoading}>
-                      {reqLoading ? 'A enviar...' : 'Submeter pedido'}
-                      <ArrowRight size={15} />
+                    {error && (
+                      <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                        <p className="text-xs text-red-600 font-medium">{error}</p>
+                      </div>
+                    )}
+                    <button className="btn-primary w-full py-3.5 text-base" onClick={submitRequest} disabled={reqLoading}>
+                      {reqLoading ? 'A enviar...' : 'Submeter pedido'} <ArrowRight size={16} />
                     </button>
                   </div>
-                </>
+                </div>
               )}
             </>
           )}
+
         </div>
       </div>
     </div>
