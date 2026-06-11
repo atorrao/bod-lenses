@@ -2,11 +2,7 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'bodlensesportugal.com',
-        pathname: '/wp-content/uploads/**',
-      },
+      { protocol: 'https', hostname: 'bodlensesportugal.com', pathname: '/wp-content/uploads/**' },
     ],
   },
 }
