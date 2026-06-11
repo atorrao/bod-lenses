@@ -8,23 +8,31 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        // Check if profile is approved
-        const { data } = await supabase
-          .from('optica_profiles')
-          .select('status')
-          .eq('id', session.user.id)
-          .single()
+    const handle = async () => {
+      // Exchange the code in the URL for a session
+      const { data: { session }, error } = await supabase.auth.getSession()
 
-        if (data?.status === 'approved') {
-          router.push('/dashboard')
-        } else {
-          await supabase.auth.signOut()
-          router.push('/?pending=1')
-        }
+      if (error || !session) {
+        router.push('/?error=1')
+        return
       }
-    })
+
+      // Check approval status
+      const { data: profile } = await supabase
+        .from('optica_profiles')
+        .select('status')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profile?.status === 'approved') {
+        router.push('/dashboard')
+      } else {
+        await supabase.auth.signOut()
+        router.push('/?pending=1')
+      }
+    }
+
+    handle()
   }, [router])
 
   return (
