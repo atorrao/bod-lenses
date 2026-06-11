@@ -30,7 +30,7 @@ export default function LandingPage() {
     setLoading(true); setError('')
     const { error: err } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback`, shouldCreateUser: false },
     })
     setLoading(false)
     if (err) { setError('Email não encontrado ou sem acesso aprovado.') }
