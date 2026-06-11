@@ -1,165 +1,204 @@
+'use client'
+
+import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
-import Navbar from '@/components/Navbar'
-import Footer from '@/components/Footer'
+import { supabase } from '@/lib/supabase'
 import { BRAND_IMAGES } from '@/lib/data'
-import { Calculator, Package, Newspaper, MessageCircle, Award, Clock, Globe, Zap } from 'lucide-react'
+import { Mail, ArrowRight, CheckCircle, Eye, BarChart2, Calculator, Users } from 'lucide-react'
 
-export default function HomePage() {
+type View = 'login' | 'request' | 'sent'
+
+export default function LandingPage() {
+  const [view, setView] = useState<View>('login')
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // Request form
+  const [req, setReq] = useState({ optica_name: '', contact_name: '', email: '', phone: '', city: '', message: '' })
+  const [reqLoading, setReqLoading] = useState(false)
+  const [reqDone, setReqDone] = useState(false)
+
+  const sendMagicLink = async () => {
+    if (!email) { setError('Indique o seu email.'); return }
+    setLoading(true); setError('')
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    })
+    setLoading(false)
+    if (err) { setError('Email não encontrado ou sem acesso aprovado.') }
+    else { setView('sent') }
+  }
+
+  const submitRequest = async () => {
+    if (!req.optica_name || !req.contact_name || !req.email) { setError('Preencha os campos obrigatórios.'); return }
+    setReqLoading(true); setError('')
+    const { error: err } = await supabase.from('access_requests').insert([req])
+    setReqLoading(false)
+    if (err) { setError('Erro ao enviar. Tente novamente.') }
+    else { setReqDone(true) }
+  }
+
   return (
-    <>
-      <Navbar />
-      <main>
-        {/* HERO */}
-        <section className="relative bg-bod-dark overflow-hidden">
-          {/* Background image with overlay */}
-          <div className="absolute inset-0">
-            <Image
-              src={BRAND_IMAGES.lenses}
-              alt="BOD Lenses"
-              fill
-              className="object-cover opacity-20"
-              priority
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-bod-dark via-bod-dark/90 to-bod-blue/40" />
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* LEFT — brand panel */}
+      <div className="relative hidden md:flex md:w-1/2 flex-col justify-between bg-bod-dark p-10 overflow-hidden">
+        <div className="absolute inset-0">
+          <Image src={BRAND_IMAGES.lenses} alt="" fill className="object-cover opacity-15" />
+          <div className="absolute inset-0 bg-gradient-to-br from-bod-dark via-bod-dark/95 to-bod-blue/30" />
+        </div>
+        <div className="relative">
+          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={140} height={38} className="h-8 w-auto brightness-0 invert" />
+        </div>
+        <div className="relative space-y-8">
+          <div>
+            <h1 className="font-display text-4xl font-bold text-white leading-tight mb-3">
+              Portal exclusivo<br /><span className="text-bod-sky">para óticas parceiras.</span>
+            </h1>
+            <p className="text-white/50 text-base leading-relaxed max-w-sm">
+              Aceda à calculadora de preços, dashboard de margens, perfil da ótica e canal direto com a BOD Lenses.
+            </p>
           </div>
-
-          <div className="relative max-w-6xl mx-auto px-6 py-24 md:py-32">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-xs font-semibold text-white/80 uppercase tracking-widest mb-8">
-                <span className="w-1.5 h-1.5 rounded-full bg-bod-sky animate-pulse" />
-                Lentes Premium · Fabricadas na Europa
-              </div>
-              <h1 className="font-display text-5xl md:text-6xl font-bold tracking-tight text-white leading-tight mb-6">
-                See better.<br />
-                <span className="text-bod-sky">Live better.</span>
-              </h1>
-              <p className="text-lg text-white/70 leading-relaxed mb-10 max-w-xl">
-                Lentes oftálmicas de alta performance para óticas que exigem o melhor — tecnologia Free-Form, certificação ISO e suporte 24/7.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Link href="/calculadora" className="btn-primary text-base px-6 py-3.5">
-                  <Calculator size={18} />
-                  Calcular preços
-                </Link>
-                <Link href="/produtos" className="btn-secondary text-base px-6 py-3.5">
-                  Ver produtos →
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* STATS */}
-        <section className="bg-bod-xlight border-b border-bod-light">
-          <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 gap-3">
             {[
-              { value: '10+', label: 'Anos de experiência' },
-              { value: 'ISO 9001', label: 'Certificação internacional' },
-              { value: '24/7', label: 'Apoio técnico' },
-              { value: 'Free-Form', label: 'Tecnologia de topo' },
-            ].map(s => (
-              <div key={s.label} className="text-center">
-                <p className="font-display text-2xl font-bold text-bod-blue">{s.value}</p>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mt-0.5 font-medium">{s.label}</p>
+              { icon: Calculator, label: 'Calculadora de preços' },
+              { icon: BarChart2,  label: 'Dashboard de margens' },
+              { icon: Eye,        label: 'Catálogo completo' },
+              { icon: Users,      label: 'Apoio dedicado 24/7' },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3">
+                <Icon size={16} className="text-bod-sky shrink-0" />
+                <span className="text-xs text-white/70 font-medium">{label}</span>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+        <div className="relative text-xs text-white/25">© 2026 BOD Lenses Portugal</div>
+      </div>
 
-        {/* FEATURE SECTIONS */}
-        <section className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <p className="section-eyebrow">As nossas lentes</p>
-            <h2 className="section-heading mb-4">Uma solução única porque a nossa visão é única</h2>
-            <p className="section-sub mb-8">
-              Gama completa de lentes monofocais, progressivas, bifocais, ocupacionais e personalizadas, fabricadas com tecnologia Free-Form de última geração.
-            </p>
-            <Link href="/produtos" className="btn-outline">
-              <Package size={16} />
-              Ver catálogo completo
-            </Link>
-          </div>
-          <div className="relative h-72 md:h-80 rounded-2xl overflow-hidden">
-            <Image src={BRAND_IMAGES.lenses} alt="Lentes BOD" fill className="object-cover" />
-          </div>
-        </section>
+      {/* RIGHT — auth panel */}
+      <div className="flex-1 flex flex-col justify-center px-6 py-12 md:px-12 bg-white min-h-screen md:min-h-0">
+        {/* Mobile logo */}
+        <div className="flex justify-center mb-8 md:hidden">
+          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={130} height={36} className="h-8 w-auto" />
+        </div>
 
-        <section className="bg-bod-xlight">
-          <div className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
-            <div className="relative h-72 md:h-80 rounded-2xl overflow-hidden order-2 md:order-1">
-              <Image src={BRAND_IMAGES.technology} alt="Tecnologia BOD" fill className="object-cover" />
-            </div>
-            <div className="order-1 md:order-2">
-              <p className="section-eyebrow">Tecnologia</p>
-              <h2 className="section-heading mb-4">A inovação ao serviço da saúde e bem-estar</h2>
-              <p className="section-sub mb-6">
-                Free-Form, fotocromáticas, filtros de luz azul e proteção UV avançada — tecnologia de vanguarda em cada par de lentes.
-              </p>
-            </div>
-          </div>
-        </section>
+        <div className="max-w-sm w-full mx-auto">
 
-        {/* NOVIDADE TERAPEUTICA */}
-        <section className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <span className="inline-block bg-green-100 text-green-700 text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Novidade 2026</span>
-            <h2 className="section-heading mb-4">Lentes com Coloração Terapêutica</h2>
-            <p className="section-sub mb-8">
-              Desenvolvidas para aliviar enxaquecas e sensibilidade à luz. Uma solução inovadora que abre um novo mercado para a sua ótica.
-            </p>
-            <Link href="/novidades" className="btn-outline">
-              <Newspaper size={16} />
-              Saber mais
-            </Link>
-          </div>
-          <div className="relative h-72 md:h-80 rounded-2xl overflow-hidden">
-            <Image src={BRAND_IMAGES.therapeutic} alt="Coloração Terapêutica" fill className="object-cover object-top" />
-          </div>
-        </section>
-
-        {/* WHY BOD */}
-        <section className="bg-bod-dark text-white">
-          <div className="max-w-6xl mx-auto px-6 py-20">
-            <div className="text-center mb-14">
-              <p className="text-xs font-bold uppercase tracking-widest text-bod-sky mb-3">Para as óticas</p>
-              <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight">Por que escolher a BOD Lenses?</h2>
-            </div>
-            <div className="grid md:grid-cols-3 gap-6">
-              {[
-                { icon: Award, title: 'Qualidade premium', desc: 'Certificação ISO 9001, 14001 e 45001. Cada lente passa por controlo rigoroso.' },
-                { icon: Clock, title: 'Entrega rápida', desc: 'Produção ágil e prazos curtos para que as encomendas cheguem sempre a tempo.' },
-                { icon: Globe, title: 'Parceria internacional', desc: 'Rede global presente em todo o mundo ao serviço das óticas portuguesas.' },
-                { icon: Zap, title: 'Plataforma 24/7', desc: 'Encomendas online a qualquer hora, com rastreamento em tempo real.' },
-                { icon: Calculator, title: 'Margens competitivas', desc: 'Preços que permitem às óticas ser competitivas sem sacrificar qualidade.' },
-                { icon: MessageCircle, title: 'Apoio especializado', desc: 'Equipa técnica disponível 24/7, em português. Sempre ao seu lado.' },
-              ].map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/8 transition-colors">
-                  <div className="w-10 h-10 bg-bod-blue/30 rounded-xl flex items-center justify-center mb-4">
-                    <Icon size={20} className="text-bod-sky" />
-                  </div>
-                  <h3 className="font-semibold text-white mb-2">{title}</h3>
-                  <p className="text-sm text-white/50 leading-relaxed">{desc}</p>
+          {/* LOGIN */}
+          {view === 'login' && (
+            <>
+              <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Entrar</h2>
+              <p className="text-sm text-gray-400 mb-8">Enviamos um link de acesso para o seu email.</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Email da ótica</label>
+                  <input type="email" className="input" placeholder="email@otica.pt"
+                    value={email} onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendMagicLink()} />
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
+                {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+                <button className="btn-primary w-full py-3" onClick={sendMagicLink} disabled={loading}>
+                  <Mail size={16} />
+                  {loading ? 'A enviar...' : 'Enviar link de acesso'}
+                </button>
+              </div>
+              <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+                <p className="text-sm text-gray-400 mb-3">Ainda não é parceiro BOD?</p>
+                <button className="btn-outline w-full py-3" onClick={() => { setView('request'); setError('') }}>
+                  Solicitar acesso
+                  <ArrowRight size={15} />
+                </button>
+              </div>
+            </>
+          )}
 
-        {/* CTA */}
-        <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-          <p className="section-eyebrow">Calculadora</p>
-          <h2 className="section-heading mb-4">Calcule a vantagem para a sua ótica</h2>
-          <p className="section-sub mx-auto mb-8">
-            Introduza o tipo de lente, material e margem desejada. Veja o custo BOD e o PVP sugerido ao cliente em segundos.
-          </p>
-          <Link href="/calculadora" className="btn-primary text-base px-8 py-4">
-            <Calculator size={18} />
-            Abrir calculadora
-          </Link>
-        </section>
-      </main>
-      <Footer />
-    </>
+          {/* SENT */}
+          {view === 'sent' && (
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <CheckCircle size={32} className="text-green-600" />
+              </div>
+              <h2 className="font-display text-2xl font-bold text-bod-dark mb-2">Verifique o seu email</h2>
+              <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                Enviámos um link de acesso para <strong className="text-bod-dark">{email}</strong>.<br />
+                Clique no link para entrar — é válido por 1 hora.
+              </p>
+              <button className="text-sm text-bod-blue font-medium hover:underline" onClick={() => setView('login')}>
+                ← Usar outro email
+              </button>
+            </div>
+          )}
+
+          {/* REQUEST ACCESS */}
+          {view === 'request' && (
+            <>
+              {reqDone ? (
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-bod-light rounded-2xl flex items-center justify-center mx-auto mb-5">
+                    <CheckCircle size={32} className="text-bod-blue" />
+                  </div>
+                  <h2 className="font-display text-xl font-bold text-bod-dark mb-2">Pedido recebido!</h2>
+                  <p className="text-gray-400 text-sm leading-relaxed">
+                    A equipa BOD irá analisar o seu pedido e entrará em contacto nas próximas 24–48h.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <button className="text-sm text-gray-400 hover:text-bod-blue mb-6 flex items-center gap-1"
+                    onClick={() => { setView('login'); setError('') }}>
+                    ← Voltar
+                  </button>
+                  <h2 className="font-display text-2xl font-bold text-bod-dark mb-1">Solicitar acesso</h2>
+                  <p className="text-sm text-gray-400 mb-7">A BOD irá analisar e aprovar o seu pedido.</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Nome da ótica *</label>
+                        <input className="input" placeholder="Ótica Exemplo"
+                          value={req.optica_name} onChange={e => setReq(p => ({ ...p, optica_name: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="label">Nome do responsável *</label>
+                        <input className="input" placeholder="João Silva"
+                          value={req.contact_name} onChange={e => setReq(p => ({ ...p, contact_name: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Email *</label>
+                      <input type="email" className="input" placeholder="email@otica.pt"
+                        value={req.email} onChange={e => setReq(p => ({ ...p, email: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Telefone</label>
+                        <input className="input" placeholder="+351 9XX XXX XXX"
+                          value={req.phone} onChange={e => setReq(p => ({ ...p, phone: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="label">Cidade</label>
+                        <input className="input" placeholder="Lisboa"
+                          value={req.city} onChange={e => setReq(p => ({ ...p, city: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Mensagem (opcional)</label>
+                      <textarea className="input resize-none" rows={3} placeholder="Conte-nos sobre a sua ótica..."
+                        value={req.message} onChange={e => setReq(p => ({ ...p, message: e.target.value }))} />
+                    </div>
+                    {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+                    <button className="btn-primary w-full py-3" onClick={submitRequest} disabled={reqLoading}>
+                      {reqLoading ? 'A enviar...' : 'Submeter pedido'}
+                      <ArrowRight size={15} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

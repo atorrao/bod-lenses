@@ -1,56 +1,39 @@
 import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Browser client (components)
+export const supabase = createBrowserClient(url, anon)
 
-// Types
-export type ContactMessage = {
+// Server client (server components / route handlers)
+export const supabaseServer = createClient(url, anon)
+
+export type Profile = {
+  id: string
+  optica_name: string | null
+  contact_name: string | null
+  email: string | null
+  phone: string | null
+  nif: string | null
+  address: string | null
+  city: string | null
+  postal_code: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  prices: Record<string, Record<string, number>>
+  coatings: Record<string, number>
+}
+
+export type SaleEntry = {
   id?: string
   created_at?: string
-  name: string
-  optica: string
-  email: string
-  subject: string
-  message: string
-  status?: 'new' | 'read' | 'replied'
-}
-
-export type OpticaLead = {
-  id?: string
-  created_at?: string
-  name: string
-  optica: string
-  email: string
-  phone?: string
-  city?: string
-  message?: string
-  interest?: 'parceria' | 'bod-start' | 'pioneiros' | 'outro'
-  status?: 'new' | 'contacted' | 'converted' | 'rejected'
-}
-
-export type PriceConfig = {
-  id?: string
-  optica_email: string
-  optica_name?: string
-  prices: PriceTable
-  coatings: CoatingPrices
-}
-
-export type PriceTable = {
-  [lensType: string]: {
-    '1.5': number
-    '1.6': number
-    '1.67': number
-    solisII: number
-  }
-}
-
-export type CoatingPrices = {
-  ar: number
-  uv: number
-  blue: number
-  foto: number
-  antiriscos: number
+  optica_id?: string
+  lens_type: string
+  material: string
+  quantity: number
+  cost_per_pair: number
+  pvp_per_pair: number
+  margin_pct: number
+  month: string
 }
