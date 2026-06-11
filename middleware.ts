@@ -2,6 +2,18 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = new URL(request.url)
+
+  // ── ADMIN protection ──────────────────────────────────────
+  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    const adminCookie = request.cookies.get('bod_admin')
+    if (adminCookie?.value !== 'authenticated') {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+    return NextResponse.next()
+  }
+
+  // ── Supabase magic link callback ───────────────────────────
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -21,14 +33,12 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Exchange auth code for session (magic link flow)
-  const { searchParams, pathname } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
 
   if (code && pathname === '/auth/callback') {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // Get session to check approval
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         const { data: profile } = await supabase
@@ -52,5 +62,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/auth/callback'],
+  matcher: ['/auth/callback', '/admin/:path*'],
 }
