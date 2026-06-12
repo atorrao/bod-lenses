@@ -52,24 +52,18 @@ export default function LandingPage() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-white">
+    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-white">
 
-      {/* ── LEFT PANEL — visible desktop, hero strip mobile ── */}
-      <div className="relative md:w-[52%] md:min-h-screen flex-shrink-0 overflow-hidden">
+      {/* ── LEFT PANEL — desktop only ── */}
+      <div className="relative hidden md:flex md:w-[52%] flex-shrink-0 overflow-hidden">
         {/* Background image */}
         <div className="absolute inset-0">
           <Image src={BRAND_IMAGES.lenses} alt="" fill className="object-cover" priority />
           <div className="absolute inset-0 bg-gradient-to-br from-bod-dark/97 via-bod-dark/90 to-bod-blue/70" />
         </div>
 
-        {/* Mobile: compact hero strip */}
-        <div className="relative md:hidden h-16 flex items-center justify-center">
-          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={110} height={30}
-            className="h-7 w-auto brightness-0 invert" />
-        </div>
-
         {/* Desktop: full brand panel */}
-        <div className="relative hidden md:flex flex-col justify-between h-full p-10 min-h-screen">
+        <div className="relative flex flex-col justify-between h-full w-full p-10">
           <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={140} height={38}
             className="h-8 w-auto brightness-0 invert" />
 
@@ -98,7 +92,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── RIGHT PANEL — auth forms ── */}
-      <div className="flex-1 flex flex-col justify-center px-5 py-10 md:px-12 bg-white">
+      <div className="flex-1 flex flex-col justify-center px-5 py-8 md:px-12 bg-white overflow-y-auto">
         <div className="w-full max-w-sm mx-auto">
           {/* Mobile logo — centered above form */}
           <div className="md:hidden flex justify-center mb-8">
@@ -141,16 +135,6 @@ export default function LandingPage() {
                 <button className="btn-outline w-full py-3" onClick={() => { setView('request'); setError('') }}>
                   Solicitar acesso <ArrowRight size={15} />
                 </button>
-              </div>
-
-              {/* Mobile features */}
-              <div className="md:hidden grid grid-cols-2 gap-2 pt-2">
-                {features.map(({ icon: Icon, label }) => (
-                  <div key={label} className="flex items-center gap-2 bg-bod-xlight rounded-xl p-3">
-                    <Icon size={14} className="text-bod-blue shrink-0" />
-                    <span className="text-xs text-gray-500 font-medium leading-tight">{label}</span>
-                  </div>
-                ))}
               </div>
             </div>
           )}
