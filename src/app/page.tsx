@@ -55,21 +55,25 @@ export default function LandingPage() {
     <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-white">
 
       {/* ── LEFT PANEL — desktop only ── */}
-      <div className="relative hidden md:flex md:w-[52%] flex-shrink-0 overflow-hidden">
-        {/* Background image */}
-        <div className="absolute inset-0">
-          <Image src={BRAND_IMAGES.lenses} alt="" fill className="object-cover" priority />
-          <div className="absolute inset-0 bg-gradient-to-br from-bod-dark/97 via-bod-dark/90 to-bod-blue/70" />
-        </div>
+      <div className="relative hidden md:flex md:w-[48%] flex-shrink-0 bg-bod-dark">
+        {/* Subtle gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-bod-dark via-[#0f2d5a] to-[#1a4a8a]/60" />
 
-        {/* Desktop: full brand panel */}
+        {/* Decorative circles */}
+        <div className="absolute top-[-80px] right-[-80px] w-80 h-80 rounded-full bg-bod-blue/10 blur-3xl" />
+        <div className="absolute bottom-[-60px] left-[-60px] w-60 h-60 rounded-full bg-bod-sky/8 blur-3xl" />
+
+        {/* Content */}
         <div className="relative flex flex-col justify-between h-full w-full p-10">
-          <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={140} height={38}
-            className="h-8 w-auto brightness-0 invert" />
+          {/* Logo area */}
+          <div className="flex items-center gap-3">
+            <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={150} height={40}
+              className="h-9 w-auto brightness-0 invert" priority />
+          </div>
 
           <div className="space-y-8">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-bod-sky mb-4">Portal exclusivo</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-bod-sky mb-4">Portal exclusivo para óticas</p>
               <h1 className="font-display text-4xl font-bold text-white leading-tight mb-4">
                 A sua ótica,<br /><span className="text-bod-sky">a sua vantagem.</span>
               </h1>
