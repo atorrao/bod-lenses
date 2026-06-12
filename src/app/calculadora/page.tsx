@@ -80,7 +80,7 @@ export default function CalculadoraPage() {
     if (currentSel.addition)    q = q.eq('addition',    currentSel.addition)
 
     const { data } = await q.limit(2000)
-    const vals = [...new Set((data ?? []).map((r: any) => r[currentStep]).filter(Boolean))].sort() as string[]
+    const vals = Array.from(new Set((data ?? []).map((r: any) => r[currentStep]).filter(Boolean))).sort() as string[]
 
     if (currentStep === 'category') {
       setOptions(vals)
