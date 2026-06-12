@@ -1,294 +1,381 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase'
-import { fmt, LENS_TYPES, MATERIALS, DEFAULT_PRICES, DEFAULT_COATINGS } from '@/lib/data'
-import type { Profile } from '@/lib/supabase'
-import { Settings, Save, Info } from 'lucide-react'
+import { fmt } from '@/lib/data'
+import { ChevronDown, RotateCcw, Calculator, CheckCircle } from 'lucide-react'
 
-type MatKey = '1.5' | '1.6' | '1.67' | 'solisII'
+// ── Types ────────────────────────────────────────────────────
+type Step = 'category' | 'design' | 'index' | 'coating' | 'filter' | 'color' | 'addition' | 'result'
 
+type Selection = {
+  category: string
+  design: string
+  index_val: string
+  coating: string
+  filter_type: string
+  color: string
+  addition: string
+}
+
+type Product = {
+  id: number
+  name: string
+  optician_price: number | null
+  pvpr: number | null
+  category: string
+  design: string
+  index_val: string
+  coating: string
+  filter_type: string
+  color: string
+  addition: string
+}
+
+const EMPTY: Selection = { category:'', design:'', index_val:'', coating:'', filter_type:'', color:'', addition:'' }
+
+const CAT_LABELS: Record<string,string> = {
+  'RX MONOFOCAL':'Monofocal RX','RX PROGRESSIVA':'Progressiva RX',
+  'RX BIFOCAL':'Bifocal RX','RX COLORAÇÃO/TINT':'Coloração / Tint RX',
+  'STOCK NANO BASIC':'Stock Nano Basic','STOCK NANO LONGUS':'Stock Nano Longus',
+  'STOCK NANO BLUELINE':'Stock Nano Blueline','STOCK NANO ACHROMATIC':'Stock Nano Achromatic',
+  'STOCK NANO SOLIS':'Stock Nano Solis','STOCK NANO TINTING':'Stock Nano Tinting',
+  'STOCK NANO TRANS GENS':'Stock Nano Trans Gens','STOCK TRANS XTRA':'Stock Trans Xtra',
+  'STOCK BLUE420':'Stock Blue420','SUPLEMENTOS':'Suplementos',
+}
+
+const STEP_LABELS: Record<string, string> = {
+  category: 'Tipo de lente', design: 'Design', index_val: 'Índice',
+  coating: 'Revestimento', filter_type: 'Filtro / Tratamento',
+  color: 'Cor', addition: 'Adição',
+}
+
+// ── Component ────────────────────────────────────────────────
 export default function CalculadoraPage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [lensType, setLensType]   = useState('monofocal')
-  const [material, setMaterial]   = useState<MatKey>('1.5')
-  const [esfera,   setEsfera]     = useState(0)
-  const [cilindro, setCilindro]   = useState(0)
-  const [margem,   setMargem]     = useState(60)
-  const [qty,      setQty]        = useState(1)
-  const [coatings, setCoatings]   = useState({ ar: false, uv: false, blue: false, foto: false, antiriscos: false })
-  const [showConfig, setShowConfig] = useState(false)
-  const [editPrices,   setEditPrices]   = useState(DEFAULT_PRICES)
-  const [editCoatings, setEditCoatings] = useState(DEFAULT_COATINGS)
-  const [saving, setSaving] = useState(false)
-  const [savedMsg, setSavedMsg] = useState('')
+  const [sel, setSel]           = useState<Selection>(EMPTY)
+  const [step, setStep]         = useState<Step>('category')
+  const [options, setOptions]   = useState<string[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [margem, setMargem]     = useState(60)
+  const [qty, setQty]           = useState(1)
+  const [matchedProducts, setMatchedProducts] = useState<Product[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) return
-      const { data } = await supabase.from('optica_profiles').select('*').eq('id', session.user.id).single()
-      setProfile(data)
-    })
+  // Steps in order — skip steps with 0 options
+  const STEPS: Step[] = ['category','design','index_val','coating','filter_type','color','addition','result']
+
+  // ── Fetch distinct values for current step ────────────────
+  const fetchOptions = useCallback(async (currentStep: Step, currentSel: Selection) => {
+    if (currentStep === 'result') return
+    setLoading(true)
+
+    let q = supabase.from('products').select(currentStep)
+    if (currentSel.category)    q = q.eq('category',    currentSel.category)
+    if (currentSel.design)      q = q.eq('design',      currentSel.design)
+    if (currentSel.index_val)   q = q.eq('index_val',   currentSel.index_val)
+    if (currentSel.coating)     q = q.eq('coating',     currentSel.coating)
+    if (currentSel.filter_type) q = q.eq('filter_type', currentSel.filter_type)
+    if (currentSel.color)       q = q.eq('color',       currentSel.color)
+    if (currentSel.addition)    q = q.eq('addition',    currentSel.addition)
+
+    const { data } = await q.limit(2000)
+    const vals = [...new Set((data ?? []).map((r: any) => r[currentStep]).filter(Boolean))].sort() as string[]
+
+    if (currentStep === 'category') {
+      setOptions(vals)
+      setLoading(false)
+      return
+    }
+
+    // If only 1 option or 0 options, skip this step
+    if (vals.length <= 1) {
+      const nextStep = getNextStep(currentStep, currentSel)
+      if (vals.length === 1) {
+        const newSel = { ...currentSel, [currentStep]: vals[0] }
+        setSel(newSel)
+        await fetchOptions(nextStep, newSel)
+      } else {
+        await fetchOptions(nextStep, currentSel)
+      }
+      return
+    }
+
+    setOptions(vals)
+    setLoading(false)
+    setStep(currentStep)
   }, [])
 
-  const prices   = profile?.prices && Object.keys(profile.prices).length ? profile.prices : DEFAULT_PRICES
-  const cPrices  = profile?.coatings && Object.keys(profile.coatings).length ? profile.coatings : DEFAULT_COATINGS
-
-  const prescSurcharge = (Math.abs(esfera) > 4 || Math.abs(cilindro) > 2) ? 8 : 0
-  const baseCost  = (prices[lensType]?.[material] ?? 0) + prescSurcharge
-  const coatCost  = (coatings.ar ? cPrices.ar : 0) + (coatings.uv ? cPrices.uv : 0)
-    + (coatings.blue ? cPrices.blue : 0) + (coatings.foto ? cPrices.foto : 0)
-    + (coatings.antiriscos ? cPrices.antiriscos : 0)
-  const totalPar  = baseCost + coatCost
-  const pvp       = totalPar * (1 + margem / 100)
-  const margin    = pvp - totalPar
-  const barWidth  = Math.min((margem / 150) * 100, 100)
-
-  const openConfig = () => {
-    setEditPrices(JSON.parse(JSON.stringify(prices)))
-    setEditCoatings({ ...cPrices })
-    setShowConfig(true)
+  const getNextStep = (current: Step, currentSel: Selection): Step => {
+    const idx = STEPS.indexOf(current)
+    return STEPS[idx + 1] as Step
   }
 
-  const saveConfig = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    setSaving(true)
-    await supabase.from('optica_profiles').update({ prices: editPrices, coatings: editCoatings }).eq('id', session.user.id)
-    setProfile(p => p ? { ...p, prices: editPrices, coatings: editCoatings } : p)
-    setSaving(false)
-    setSavedMsg('Preços guardados!')
-    setTimeout(() => setSavedMsg(''), 3000)
-    setShowConfig(false)
+  // ── Initial load ──────────────────────────────────────────
+  useEffect(() => { fetchOptions('category', EMPTY) }, [fetchOptions])
+
+  // ── Select an option ──────────────────────────────────────
+  const select = async (field: Step, value: string) => {
+    const newSel = { ...sel, [field]: value }
+    setSel(newSel)
+    const nextStep = getNextStep(field, newSel)
+    if (nextStep === 'result') {
+      await fetchProducts(newSel)
+    } else {
+      await fetchOptions(nextStep, newSel)
+    }
   }
 
-  const lensLabel = LENS_TYPES.find(l => l.key === lensType)?.label ?? lensType
-  const matLabel  = MATERIALS.find(m => m.key === material)?.label ?? material
+  // ── Fetch matching products for result ────────────────────
+  const fetchProducts = async (s: Selection) => {
+    setLoading(true)
+    let q = supabase.from('products').select('*')
+    if (s.category)    q = q.eq('category',    s.category)
+    if (s.design)      q = q.eq('design',      s.design)
+    if (s.index_val)   q = q.eq('index_val',   s.index_val)
+    if (s.coating)     q = q.eq('coating',     s.coating)
+    if (s.filter_type) q = q.eq('filter_type', s.filter_type)
+    if (s.color)       q = q.eq('color',       s.color)
+    if (s.addition)    q = q.eq('addition',    s.addition)
+    const { data } = await q.limit(50)
+    setMatchedProducts(data ?? [])
+    setSelectedProduct((data ?? [])[0] ?? null)
+    setStep('result')
+    setLoading(false)
+  }
+
+  // ── Reset ─────────────────────────────────────────────────
+  const reset = () => {
+    setSel(EMPTY)
+    setStep('category')
+    setMatchedProducts([])
+    setSelectedProduct(null)
+    fetchOptions('category', EMPTY)
+  }
+
+  // ── Back ──────────────────────────────────────────────────
+  const back = () => {
+    // Find last non-empty field
+    const fields: (keyof Selection)[] = ['addition','color','filter_type','coating','index_val','design','category']
+    for (const f of fields) {
+      if (sel[f]) {
+        const newSel = { ...sel, [f]: '' }
+        // Also clear subsequent fields
+        const idx = fields.indexOf(f)
+        for (let i = 0; i < idx; i++) newSel[fields[i]] = ''
+        setSel(newSel)
+        fetchOptions(f as Step, newSel)
+        return
+      }
+    }
+    reset()
+  }
+
+  // ── Calculation ───────────────────────────────────────────
+  const price      = selectedProduct?.optician_price ?? 0
+  const pvpCalc    = price * (1 + margem / 100)
+  const pvpSuggest = selectedProduct?.pvpr ?? null
+  const margin     = pvpCalc - price
+  const barWidth   = Math.min((margem / 150) * 100, 100)
+
+  // ── Breadcrumb ────────────────────────────────────────────
+  const breadcrumb = Object.entries(sel)
+    .filter(([, v]) => v)
+    .map(([k, v]) => ({ key: k, val: k === 'category' ? (CAT_LABELS[v] ?? v) : v }))
 
   return (
     <AppShell>
       <div className="px-4 md:px-8 py-6 max-w-5xl mx-auto">
-        <div className="mb-6">
-          <p className="text-xs font-bold uppercase tracking-widest text-bod-blue mb-1">Ferramenta</p>
-          <h1 className="font-display text-2xl font-bold text-bod-dark">Calculadora de Preços</h1>
-          <p className="text-sm text-gray-400 mt-1">Calcule o custo BOD e o PVP ao cliente em tempo real.</p>
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-bod-blue mb-1">Configurador</p>
+            <h1 className="font-display text-2xl font-bold text-bod-dark">Calculadora de Preços</h1>
+            <p className="text-sm text-gray-400 mt-1">Selecione as características da lente para encontrar o preço.</p>
+          </div>
+          {breadcrumb.length > 0 && (
+            <button onClick={reset} className="btn-ghost text-xs gap-1.5 shrink-0">
+              <RotateCcw size={13} /> Recomeçar
+            </button>
+          )}
         </div>
 
+        {/* Breadcrumb */}
+        {breadcrumb.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-5 p-3 bg-bod-xlight rounded-xl">
+            {breadcrumb.map((b, i) => (
+              <span key={b.key} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-gray-300 text-xs">›</span>}
+                <span className="text-xs font-semibold text-bod-blue bg-white border border-bod-light px-2.5 py-1 rounded-lg">
+                  {b.val}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-5 gap-5 items-start">
-          {/* INPUTS */}
-          <div className="lg:col-span-3 space-y-4">
-            <div className="card p-5 md:p-6">
-              <div className="grid grid-cols-2 gap-4 mb-5">
-                <div>
-                  <label className="label">Tipo de lente</label>
-                  <select className="input" value={lensType} onChange={e => setLensType(e.target.value)}>
-                    {LENS_TYPES.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Material</label>
-                  <select className="input" value={material} onChange={e => setMaterial(e.target.value as MatKey)}>
-                    {MATERIALS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Esfera (Dpt)</label>
-                  <input type="number" step="0.25" min="-20" max="20" className="input"
-                    value={esfera} onChange={e => setEsfera(parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <label className="label">Cilindro (Dpt)</label>
-                  <input type="number" step="0.25" min="-8" max="8" className="input"
-                    value={cilindro} onChange={e => setCilindro(parseFloat(e.target.value) || 0)} />
-                </div>
+          {/* LEFT — selector */}
+          <div className="lg:col-span-3">
+            {loading ? (
+              <div className="card p-10 flex items-center justify-center">
+                <div className="w-7 h-7 border-2 border-bod-blue border-t-transparent rounded-full animate-spin" />
               </div>
-
-              {prescSurcharge > 0 && (
-                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-5">
-                  <Info size={14} /> Prescrição elevada: suplemento +{fmt(prescSurcharge)} aplicado.
-                </div>
-              )}
-
-              <div className="border-t border-bod-light pt-4 mb-5">
-                <p className="label mb-3">Revestimentos</p>
-                <div className="space-y-1">
-                  {[
-                    { key: 'ar',         label: 'Anti-reflexo (AR)',        price: cPrices.ar },
-                    { key: 'uv',         label: 'Proteção UV 400',          price: cPrices.uv },
-                    { key: 'blue',       label: 'Filtro luz azul',          price: cPrices.blue },
-                    { key: 'foto',       label: 'Fotocromática',            price: cPrices.foto },
-                    { key: 'antiriscos', label: 'Anti-riscos reforçado',    price: cPrices.antiriscos },
-                  ].map(c => (
-                    <label key={c.key} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bod-xlight cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <input type="checkbox" className="w-4 h-4 accent-bod-blue cursor-pointer"
-                          checked={coatings[c.key as keyof typeof coatings]}
-                          onChange={e => setCoatings(p => ({ ...p, [c.key]: e.target.checked }))} />
-                        <span className="text-sm text-gray-700">{c.label}</span>
-                      </div>
-                      <span className="text-xs font-semibold text-bod-blue">+{fmt(c.price)}</span>
-                    </label>
+            ) : step !== 'result' ? (
+              <div className="card p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
+                  {STEP_LABELS[step] ?? step}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {options.map(opt => (
+                    <button key={opt}
+                      className="flex items-center justify-between px-4 py-3 rounded-xl border border-bod-light hover:border-bod-blue hover:bg-bod-xlight text-left transition-all group"
+                      onClick={() => select(step, opt)}>
+                      <span className="text-sm font-medium text-bod-dark">
+                        {step === 'category' ? (CAT_LABELS[opt] ?? opt) : opt}
+                      </span>
+                      <ChevronDown size={14} className="text-gray-300 group-hover:text-bod-blue -rotate-90 transition-colors shrink-0" />
+                    </button>
                   ))}
                 </div>
+                {breadcrumb.length > 0 && (
+                  <button onClick={back} className="mt-4 text-xs text-gray-400 hover:text-bod-blue font-medium">
+                    ← Voltar atrás
+                  </button>
+                )}
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Margem ótica (%)</label>
-                  <input type="number" step="5" min="0" max="500" className="input font-semibold"
-                    value={margem} onChange={e => setMargem(parseFloat(e.target.value) || 0)} />
+            ) : (
+              /* RESULTS */
+              <div className="space-y-4">
+                <div className="card p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                      {matchedProducts.length} produto{matchedProducts.length !== 1 ? 's' : ''} encontrado{matchedProducts.length !== 1 ? 's' : ''}
+                    </p>
+                    <button onClick={back} className="text-xs text-bod-blue font-semibold hover:underline">← Alterar</button>
+                  </div>
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {matchedProducts.map(p => (
+                      <button key={p.id}
+                        className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl border text-left transition-all ${selectedProduct?.id === p.id ? 'border-bod-blue bg-bod-xlight' : 'border-bod-light hover:border-bod-blue/50 hover:bg-gray-50'}`}
+                        onClick={() => setSelectedProduct(p)}>
+                        <div className="flex-1 min-w-0 pr-3">
+                          <p className="text-sm font-medium text-bod-dark truncate">{p.name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {p.optician_price && (
+                            <span className="text-sm font-bold text-bod-blue">{fmt(p.optician_price)}</span>
+                          )}
+                          {selectedProduct?.id === p.id && (
+                            <CheckCircle size={16} className="text-bod-blue" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label className="label">Quantidade (pares)</label>
-                  <input type="number" min="1" className="input"
-                    value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+
+                {/* Margin config */}
+                <div className="card p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Configurar preço</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Margem ótica (%)</label>
+                      <input type="number" step="5" min="0" max="500" className="input font-semibold"
+                        value={margem} onChange={e => setMargem(parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <label className="label">Quantidade (pares)</label>
+                      <input type="number" min="1" className="input"
+                        value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <button onClick={openConfig}
-              className="w-full flex items-center justify-between p-4 card hover:bg-bod-xlight transition-colors cursor-pointer">
-              <div>
-                <p className="text-sm font-semibold text-bod-dark">Personalizar tabela de preços</p>
-                <p className="text-xs text-gray-400">Edite os preços BOD e guarde no seu perfil</p>
-              </div>
-              <Settings size={18} className="text-gray-400 shrink-0" />
-            </button>
-            {savedMsg && <p className="text-xs text-green-600 font-semibold text-center">{savedMsg}</p>}
+            )}
           </div>
 
-          {/* RESULTS */}
+          {/* RIGHT — result panel */}
           <div className="lg:col-span-2 lg:sticky lg:top-6">
             <div className="bg-bod-dark rounded-2xl p-6 text-white">
               <h2 className="text-xs font-bold uppercase tracking-widest text-bod-sky mb-5">Resultado</h2>
-              <div className="space-y-0">
-                {[
-                  { label: 'Custo BOD (par)',      value: fmt(baseCost),   muted: true },
-                  { label: 'Revestimentos',         value: coatCost > 0 ? fmt(coatCost) : '—', muted: true },
-                ].map(r => (
-                  <div key={r.label} className="flex justify-between py-2.5 border-b border-white/8">
-                    <span className="text-sm text-white/50">{r.label}</span>
-                    <span className="text-sm text-white/70 font-medium">{r.value}</span>
+
+              {!selectedProduct || step !== 'result' ? (
+                <div className="text-center py-8">
+                  <Calculator size={32} className="text-white/20 mx-auto mb-3" />
+                  <p className="text-sm text-white/40 leading-relaxed">
+                    Selecione as características da lente para ver o preço.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-0">
+                  <div className="pb-3 mb-3 border-b border-white/10">
+                    <p className="text-xs text-white/40 mb-1">Produto selecionado</p>
+                    <p className="text-sm font-semibold text-white leading-snug">{selectedProduct.name}</p>
                   </div>
-                ))}
-                <div className="flex justify-between py-3 border-b border-white/15">
-                  <span className="text-sm text-white/70">Custo total / par</span>
-                  <span className="text-base font-bold">{fmt(totalPar)}</span>
-                </div>
-                <div className="flex justify-between py-4">
-                  <span className="text-sm text-white/70">PVP ao cliente</span>
-                  <span className="text-2xl font-bold text-bod-sky">{fmt(pvp)}</span>
-                </div>
-                <div className="flex justify-between py-2.5 border-t border-white/10">
-                  <span className="text-sm text-white/50">Margem / par</span>
-                  <span className="text-sm font-semibold text-green-400">+{fmt(margin)}</span>
-                </div>
-                {qty > 1 && (
-                  <>
-                    <div className="flex justify-between py-2.5 border-t border-white/10">
-                      <span className="text-sm text-white/50">Total custo ({qty} pares)</span>
-                      <span className="text-sm font-semibold">{fmt(totalPar * qty)}</span>
-                    </div>
-                    <div className="flex justify-between py-2.5">
-                      <span className="text-sm text-white/70">Total PVP ({qty} pares)</span>
-                      <span className="text-sm font-bold text-white">{fmt(pvp * qty)}</span>
-                    </div>
-                    <div className="flex justify-between py-2.5 border-t border-white/10">
-                      <span className="text-sm text-white/50">Margem total</span>
-                      <span className="text-sm font-bold text-green-400">+{fmt(margin * qty)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
 
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-white/40 mb-1.5">
-                  <span>Margem</span><span className="font-semibold text-white/60">{Math.round(margem)}%</span>
-                </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-bod-sky rounded-full transition-all duration-300" style={{ width: `${barWidth}%` }} />
-                </div>
-              </div>
+                  {[
+                    { label: 'Custo para si (par)',  value: selectedProduct.optician_price ? fmt(selectedProduct.optician_price) : '—', muted: false },
+                    { label: 'PVPR sugerido',         value: pvpSuggest ? fmt(pvpSuggest) : '—',                                        muted: true },
+                  ].map(r => (
+                    <div key={r.label} className="flex justify-between py-2.5 border-b border-white/8">
+                      <span className="text-sm text-white/50">{r.label}</span>
+                      <span className={`text-sm font-semibold ${r.muted ? 'text-white/70' : 'text-white'}`}>{r.value}</span>
+                    </div>
+                  ))}
 
-              <div className="mt-4 bg-white/8 border border-white/10 rounded-xl p-4">
-                <p className="text-xs text-white/60 leading-relaxed">
-                  <span className="text-white font-medium">{lensLabel}</span> em {matLabel} —
-                  custo <span className="text-bod-sky font-semibold">{fmt(totalPar)}</span> · PVP{' '}
-                  <span className="text-white font-semibold">{fmt(pvp)}</span> · margem{' '}
-                  <span className="text-green-400 font-semibold">+{fmt(margin)}</span> por par.
-                </p>
-              </div>
+                  <div className="flex justify-between py-4">
+                    <span className="text-sm text-white/70">PVP calculado</span>
+                    <span className="text-2xl font-bold text-bod-sky">{fmt(pvpCalc)}</span>
+                  </div>
+
+                  <div className="flex justify-between py-2.5 border-t border-white/10">
+                    <span className="text-sm text-white/50">Margem / par</span>
+                    <span className="text-sm font-bold text-green-400">+{fmt(margin)}</span>
+                  </div>
+
+                  {qty > 1 && (
+                    <>
+                      <div className="flex justify-between py-2.5 border-t border-white/10">
+                        <span className="text-sm text-white/50">Total custo ({qty} pares)</span>
+                        <span className="text-sm font-semibold text-white/70">{fmt(price * qty)}</span>
+                      </div>
+                      <div className="flex justify-between py-2.5">
+                        <span className="text-sm text-white/70">Total PVP ({qty} pares)</span>
+                        <span className="text-sm font-bold text-white">{fmt(pvpCalc * qty)}</span>
+                      </div>
+                      <div className="flex justify-between py-2.5 border-t border-white/10">
+                        <span className="text-sm text-white/50">Margem total</span>
+                        <span className="text-sm font-bold text-green-400">+{fmt(margin * qty)}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Margin bar */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs text-white/40 mb-1.5">
+                      <span>Margem aplicada</span>
+                      <span className="font-semibold text-white/60">{Math.round(margem)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-bod-sky rounded-full transition-all duration-300"
+                        style={{ width: `${barWidth}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 bg-white/8 border border-white/10 rounded-xl p-3.5">
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      Custo <span className="text-bod-sky font-semibold">{fmt(price)}</span> · PVP calculado{' '}
+                      <span className="text-white font-semibold">{fmt(pvpCalc)}</span> · margem{' '}
+                      <span className="text-green-400 font-semibold">+{fmt(margin)}</span> por par.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* PRICE CONFIG MODAL */}
-      {showConfig && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4"
-          onClick={() => setShowConfig(false)}>
-          <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-2xl max-h-[85vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-bod-light sticky top-0 bg-white rounded-t-3xl md:rounded-t-2xl">
-              <h2 className="font-display text-lg font-bold text-bod-dark">Tabela de preços</h2>
-              <p className="text-xs text-gray-400 mt-1">Preços de custo BOD por tipo de lente (€ por par).</p>
-            </div>
-            <div className="p-5 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs font-bold uppercase tracking-wide text-gray-400">
-                    <th className="text-left pb-3 pr-4">Tipo</th>
-                    <th className="text-center pb-3 px-2">1.5</th>
-                    <th className="text-center pb-3 px-2">1.6</th>
-                    <th className="text-center pb-3 px-2">1.67</th>
-                    <th className="text-center pb-3 px-2">Solis II</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {LENS_TYPES.map(l => (
-                    <tr key={l.key} className="border-t border-bod-light">
-                      <td className="py-2 pr-4 text-gray-500 text-xs font-medium whitespace-nowrap">{l.label}</td>
-                      {(['1.5','1.6','1.67','solisII'] as MatKey[]).map(mk => (
-                        <td key={mk} className="py-2 px-2">
-                          <input type="number" step="0.5" min="0"
-                            className="w-16 px-2 py-1.5 border border-bod-light rounded-lg text-sm text-right font-semibold focus:outline-none focus:border-bod-blue"
-                            value={editPrices[l.key]?.[mk] ?? 0}
-                            onChange={e => setEditPrices(p => ({ ...p, [l.key]: { ...p[l.key], [mk]: parseFloat(e.target.value)||0 } }))} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="mt-5 pt-4 border-t border-bod-light">
-                <p className="label mb-3">Revestimentos</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { key: 'ar', label: 'Anti-reflexo' }, { key: 'uv', label: 'UV 400' },
-                    { key: 'blue', label: 'Blue-Cut' }, { key: 'foto', label: 'Fotocromática' },
-                    { key: 'antiriscos', label: 'Anti-riscos' },
-                  ].map(c => (
-                    <div key={c.key}>
-                      <label className="label">{c.label}</label>
-                      <input type="number" step="0.5" min="0"
-                        className="w-full px-3 py-2 border border-bod-light rounded-xl text-sm font-semibold text-right focus:outline-none focus:border-bod-blue"
-                        value={editCoatings[c.key] ?? 0}
-                        onChange={e => setEditCoatings(p => ({ ...p, [c.key]: parseFloat(e.target.value)||0 }))} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="p-5 border-t border-bod-light flex gap-3 sticky bottom-0 bg-white">
-              <button className="btn-ghost flex-1" onClick={() => setShowConfig(false)}>Cancelar</button>
-              <button className="btn-primary flex-1" onClick={saveConfig} disabled={saving}>
-                <Save size={15} /> {saving ? 'A guardar...' : 'Guardar preços'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   )
 }
