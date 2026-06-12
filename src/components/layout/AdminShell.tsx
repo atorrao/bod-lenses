@@ -5,11 +5,12 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { BRAND_IMAGES } from '@/lib/data'
-import { LayoutDashboard, Building2, ShoppingBag, UserCheck, LogOut, Menu, X, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Building2, ShoppingBag, UserCheck, LogOut, Menu, X, ChevronRight, Package } from 'lucide-react'
 
 const navItems = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/oticas',    icon: Building2,       label: 'Óticas' },
+  { href: '/admin/produtos',  icon: Package,         label: 'Produtos' },
   { href: '/admin/vendas',    icon: ShoppingBag,     label: 'Vendas' },
   { href: '/admin/pedidos',   icon: UserCheck,       label: 'Pedidos de acesso' },
 ]
