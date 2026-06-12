@@ -63,10 +63,9 @@ export default function LandingPage() {
         </div>
 
         {/* Mobile: compact hero strip */}
-        <div className="relative md:hidden flex items-center justify-between px-5 py-5">
+        <div className="relative md:hidden h-16 flex items-center justify-center">
           <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={110} height={30}
             className="h-7 w-auto brightness-0 invert" />
-          <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Portal Parceiros</span>
         </div>
 
         {/* Desktop: full brand panel */}
@@ -101,6 +100,10 @@ export default function LandingPage() {
       {/* ── RIGHT PANEL — auth forms ── */}
       <div className="flex-1 flex flex-col justify-center px-5 py-10 md:px-12 bg-white">
         <div className="w-full max-w-sm mx-auto">
+          {/* Mobile logo — centered above form */}
+          <div className="md:hidden flex justify-center mb-8">
+            <Image src={BRAND_IMAGES.logo} alt="BOD Lenses" width={120} height={32} className="h-8 w-auto" />
+          </div>
 
           {/* LOGIN */}
           {view === 'login' && (
