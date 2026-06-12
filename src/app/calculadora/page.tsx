@@ -7,7 +7,7 @@ import { fmt } from '@/lib/data'
 import { ChevronDown, RotateCcw, Calculator, CheckCircle } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────
-type Step = 'category' | 'design' | 'index' | 'coating' | 'filter' | 'color' | 'addition' | 'result'
+type Step = 'category' | 'design' | 'index_val' | 'coating' | 'filter_type' | 'color' | 'addition' | 'result'
 
 type Selection = {
   category: string
