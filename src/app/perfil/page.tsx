@@ -66,14 +66,6 @@ export default function PerfilPage() {
           <div>
             <h1 className="font-display text-2xl font-bold text-bod-dark">{form.optica_name || 'Perfil'}</h1>
             <p className="text-sm text-gray-400">{profile?.email}</p>
-            <span className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-              profile?.status === 'approved' ? 'bg-green-100 text-green-700' :
-              profile?.status === 'pending'  ? 'bg-amber-100 text-amber-700' :
-              'bg-red-100 text-red-500'
-            }`}>
-              {profile?.status === 'approved' ? 'Acesso aprovado' :
-               profile?.status === 'pending'  ? 'A aguardar aprovação' : 'Acesso recusado'}
-            </span>
           </div>
         </div>
 
