@@ -76,7 +76,7 @@ export default function AdminPedidos() {
     rejected: 'bg-red-100 text-red-500',
   }[s] ?? 'bg-gray-100 text-gray-500')
 
-  const subjects = [...new Set(messages.map(m => m.subject))].sort()
+  const subjects = Array.from(new Set(messages.map(m => m.subject))).sort()
 
   const filteredMsgs = messages.filter(m => {
     const matchSearch  = !search || m.optica?.toLowerCase().includes(search.toLowerCase()) || m.subject?.toLowerCase().includes(search.toLowerCase()) || m.name?.toLowerCase().includes(search.toLowerCase())
