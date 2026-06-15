@@ -167,6 +167,7 @@ export default function CalculadoraPage() {
 
   // ── Select a DB option ───────────────────────────────────
   const selectOption = async (field: Step, value: string) => {
+    // Empty value means "não se aplica" — skip this field
     const newSel = { ...sel, [field]: value }
     setSel(newSel)
     const nextStep = getNextDbStep(field)
@@ -333,6 +334,14 @@ export default function CalculadoraPage() {
                       <ChevronDown size={14} className="text-gray-300 group-hover:text-bod-blue -rotate-90 transition-colors shrink-0" />
                     </button>
                   ))}
+                  {(step === 'coating' || step === 'filter_type' || step === 'color') && (
+                    <button
+                      className="flex items-center justify-between px-4 py-3 rounded-xl border border-dashed border-gray-200 hover:border-bod-blue hover:bg-bod-xlight text-left transition-all group col-span-1 sm:col-span-2"
+                      onClick={() => selectOption(step, '')}>
+                      <span className="text-sm text-gray-400 group-hover:text-bod-blue">Não se aplica / Ver todos</span>
+                      <ChevronDown size={14} className="text-gray-300 group-hover:text-bod-blue -rotate-90 transition-colors shrink-0" />
+                    </button>
+                  )}
                 </div>
                 <button onClick={back} className="mt-4 text-xs text-gray-400 hover:text-bod-blue font-medium">← Voltar atrás</button>
               </div>
