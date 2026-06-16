@@ -2,39 +2,40 @@
 
 import { useEffect, useState } from 'react'
 import AdminShell from '@/components/layout/AdminShell'
-import { supabaseServer as supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { fmt } from '@/lib/data'
-import { Building2, ShoppingBag, Euro, UserCheck } from 'lucide-react'
+import { Building2, ShoppingBag, Euro, UserCheck, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalOticas: 0, approvedOticas: 0, pendingOticas: 0,
     totalSales: 0, totalRevenue: 0, totalMargin: 0,
-    pendingRequests: 0,
+    pendingRequests: 0, newMessages: 0,
   })
-  const [recentOticas, setRecentOticas]   = useState<any[]>([])
-  const [recentSales,  setRecentSales]    = useState<any[]>([])
+  const [recentOticas, setRecentOticas] = useState<any[]>([])
+  const [recentSales,  setRecentSales]  = useState<any[]>([])
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   const load = async () => {
     const [
       { data: oticas },
       { data: sales },
       { data: requests },
+      { data: messages },
     ] = await Promise.all([
       supabase.from('optica_profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('sales_log').select('*').order('created_at', { ascending: false }),
       supabase.from('access_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+      supabase.from('contact_messages').select('id, status'),
     ])
 
-    const approved  = (oticas ?? []).filter((o: any) => o.status === 'approved').length
-    const pending   = (oticas ?? []).filter((o: any) => o.status === 'pending').length
-    const revenue   = (sales ?? []).reduce((a: number, s: any) => a + s.pvp_per_pair * s.quantity, 0)
-    const margin    = (sales ?? []).reduce((a: number, s: any) => a + (s.pvp_per_pair - s.cost_per_pair) * s.quantity, 0)
+    const approved   = (oticas ?? []).filter((o: any) => o.status === 'approved').length
+    const pending    = (oticas ?? []).filter((o: any) => o.status === 'pending').length
+    const revenue    = (sales ?? []).reduce((a: number, s: any) => a + s.pvp_per_pair * s.quantity, 0)
+    const margin     = (sales ?? []).reduce((a: number, s: any) => a + (s.pvp_per_pair - s.cost_per_pair) * s.quantity, 0)
+    const newMsgs    = (messages ?? []).filter((m: any) => m.status === 'new').length
 
     setStats({
       totalOticas: (oticas ?? []).length,
@@ -44,6 +45,7 @@ export default function AdminDashboard() {
       totalRevenue: revenue,
       totalMargin: margin,
       pendingRequests: (requests ?? []).length,
+      newMessages: newMsgs,
     })
     setRecentOticas((oticas ?? []).slice(0, 5))
     setRecentSales((sales ?? []).slice(0, 6))
@@ -57,7 +59,35 @@ export default function AdminDashboard() {
           <p className="text-sm text-gray-400 mt-1">Visão geral da plataforma BOD Lenses</p>
         </div>
 
-        {/* KPIs */}
+        {/* NEW MESSAGES BANNER */}
+        {(stats.newMessages > 0 || stats.pendingRequests > 0) && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            {stats.newMessages > 0 && (
+              <Link href="/admin/pedidos" className="flex-1 flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl hover:bg-amber-100 transition-colors">
+                <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                  <MessageSquare size={18} className="text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-800">{stats.newMessages} nova{stats.newMessages !== 1 ? 's' : ''} mensagem{stats.newMessages !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-amber-600">A aguardar resposta — clique para ver</p>
+                </div>
+                <span className="w-6 h-6 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0">{stats.newMessages}</span>
+              </Link>
+            )}
+            {stats.pendingRequests > 0 && (
+              <Link href="/admin/pedidos" className="flex-1 flex items-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-2xl hover:bg-purple-100 transition-colors">
+                <div className="w-9 h-9 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
+                  <UserCheck size={18} className="text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-purple-800">{stats.pendingRequests} pedido{stats.pendingRequests !== 1 ? 's' : ''} de acesso pendente{stats.pendingRequests !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-purple-600">A aguardar aprovação</p>
+                </div>
+                <span className="w-6 h-6 bg-purple-500 text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0">{stats.pendingRequests}</span>
+              </Link>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { icon: Building2, label: 'Óticas aprovadas',    value: stats.approvedOticas, sub: `${stats.pendingOticas} pendentes`,  color: 'text-bod-blue',   bg: 'bg-bod-light' },
