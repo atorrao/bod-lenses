@@ -1,65 +1,120 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase'
-import { fmt, LENS_TYPES, MATERIALS, DEFAULT_PRICES, DEFAULT_COATINGS, currentMonth } from '@/lib/data'
+import { fmt, currentMonth } from '@/lib/data'
 import type { SaleEntry, Profile } from '@/lib/supabase'
-import { TrendingUp, Euro, Users, Plus, Trash2, BarChart2 } from 'lucide-react'
+import { TrendingUp, Euro, Users, Plus, Trash2, BarChart2, MessageSquare, Bell, X, ChevronDown } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
-type MatKey = '1.5' | '1.6' | '1.67' | 'solisII'
+// ── Same cascade types as calculator ───────────────────────
+const LENS_TYPE_MAP: Record<string, string[]> = {
+  'Monofocal':        ['RX MONOFOCAL','STOCK NANO BASIC','STOCK NANO LONGUS','STOCK NANO BLUELINE','STOCK NANO ACHROMATIC','STOCK NANO SOLIS','STOCK BLUE420'],
+  'Progressiva':      ['RX PROGRESSIVA'],
+  'Bifocal':          ['RX BIFOCAL'],
+  'Coloração / Tint': ['RX COLORAÇÃO/TINT','STOCK NANO TINTING'],
+  'Fotocromática':    ['STOCK NANO TRANS GENS','STOCK TRANS XTRA'],
+  'Suplementos':      ['SUPLEMENTOS'],
+}
+const LENS_TYPES_ORDER = ['Monofocal','Progressiva','Bifocal','Coloração / Tint','Fotocromática','Suplementos']
+
+type SaleStep = 'lensType' | 'product' | 'config'
 
 export default function DashboardPage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [sales, setSales] = useState<SaleEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showAdd, setShowAdd] = useState(false)
+  const router = useRouter()
+  const [profile, setProfile]   = useState<Profile | null>(null)
+  const [sales,   setSales]     = useState<SaleEntry[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [showAdd, setShowAdd]   = useState(false)
 
-  // New sale form
-  const [ns, setNs] = useState({
-    lens_type: 'monofocal', material: '1.5' as MatKey,
-    quantity: 1, margin_pct: 60
-  })
+  // Messages notification
+  const [unreplied, setUnreplied]   = useState(0)  // messages with BOD reply not yet seen
+  const [newReplies, setNewReplies] = useState(0)  // replies from BOD since last visit
 
-  useEffect(() => {
-    load()
-  }, [])
+  // Sale form — cascade like calculator
+  const [saleStep,    setSaleStep]    = useState<SaleStep>('lensType')
+  const [saleLensType, setSaleLensType] = useState('')
+  const [products,    setProducts]    = useState<any[]>([])
+  const [prodSearch,  setProdSearch]  = useState('')
+  const [selectedProd, setSelectedProd] = useState<any | null>(null)
+  const [quantity,    setQuantity]    = useState(1)
+  const [margem,      setMargem]      = useState(60)
+  const [loadingProd, setLoadingProd] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    const [{ data: prof }, { data: sl }] = await Promise.all([
+
+    const [{ data: prof }, { data: sl }, { data: msgs }] = await Promise.all([
       supabase.from('optica_profiles').select('*').eq('id', session.user.id).single(),
-      supabase.from('sales_log').select('*').eq('optica_id', session.user.id).order('created_at', { ascending: false })
+      supabase.from('sales_log').select('*').eq('optica_id', session.user.id).order('created_at', { ascending: false }),
+      supabase.from('contact_messages').select('id, status').eq('optica_id', session.user.id),
     ])
     setProfile(prof)
     setSales(sl ?? [])
+
+    // Count messages with BOD replies (status = replied)
+    const repliedCount = (msgs ?? []).filter((m: any) => m.status === 'replied').length
+    setNewReplies(repliedCount)
+
     setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Load products for selected lens type
+  const loadProducts = async (lensType: string) => {
+    setLoadingProd(true)
+    const cats = LENS_TYPE_MAP[lensType] ?? []
+    const { data } = await (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating').in('category', cats) as any).order('name').limit(500)
+    setProducts(data ?? [])
+    setLoadingProd(false)
   }
 
-  const prices   = profile?.prices && Object.keys(profile.prices).length ? profile.prices : DEFAULT_PRICES
-  const coatings = profile?.coatings && Object.keys(profile.coatings).length ? profile.coatings : DEFAULT_COATINGS
+  const selectLensType = async (lt: string) => {
+    setSaleLensType(lt)
+    await loadProducts(lt)
+    setSaleStep('product')
+  }
 
-  const computedCost = () => prices[ns.lens_type]?.[ns.material] ?? 0
-  const computedPvp  = () => computedCost() * (1 + ns.margin_pct / 100)
-  const computedMargin = () => computedPvp() - computedCost()
+  const selectProduct = (p: any) => {
+    setSelectedProd(p)
+    setSaleStep('config')
+  }
+
+  const resetSaleForm = () => {
+    setSaleStep('lensType')
+    setSaleLensType('')
+    setSelectedProd(null)
+    setProducts([])
+    setProdSearch('')
+    setQuantity(1)
+    setMargem(60)
+  }
+
+  const cost = selectedProd?.optician_price ?? 0
+  const pvp  = cost * (1 + margem / 100)
+  const margin = pvp - cost
 
   const addSale = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session || !selectedProd) return
     const entry: SaleEntry = {
-      optica_id:    session.user.id,
-      lens_type:    ns.lens_type,
-      material:     ns.material,
-      quantity:     ns.quantity,
-      cost_per_pair: computedCost(),
-      pvp_per_pair:  computedPvp(),
-      margin_pct:    ns.margin_pct,
-      month:         currentMonth(),
+      optica_id:     session.user.id,
+      lens_type:     saleLensType,
+      material:      selectedProd.index_val ?? '',
+      quantity,
+      cost_per_pair:  cost,
+      pvp_per_pair:   pvp,
+      margin_pct:     margem,
+      month:          currentMonth(),
     }
     await supabase.from('sales_log').insert([entry])
     setShowAdd(false)
+    resetSaleForm()
     load()
   }
 
@@ -69,27 +124,24 @@ export default function DashboardPage() {
   }
 
   // Aggregates
-  const totalPairs    = sales.reduce((a, s) => a + s.quantity, 0)
-  const totalRevenue  = sales.reduce((a, s) => a + s.pvp_per_pair * s.quantity, 0)
-  const totalCost     = sales.reduce((a, s) => a + s.cost_per_pair * s.quantity, 0)
-  const totalMargin   = totalRevenue - totalCost
-  // Competitor price estimate: BOD is ~20% cheaper
-  const competitorEst = totalCost * 1.20
-  const clientSaving  = competitorEst - totalCost
+  const totalPairs   = sales.reduce((a, s) => a + s.quantity, 0)
+  const totalRevenue = sales.reduce((a, s) => a + s.pvp_per_pair * s.quantity, 0)
+  const totalCost    = sales.reduce((a, s) => a + s.cost_per_pair * s.quantity, 0)
+  const totalMargin  = totalRevenue - totalCost
+  const clientSaving = totalCost * 0.20
 
-  // Monthly breakdown
-  const byMonth = sales.reduce<Record<string, { revenue: number; margin: number; pairs: number }>>((acc, s) => {
-    if (!acc[s.month]) acc[s.month] = { revenue: 0, margin: 0, pairs: 0 }
+  const byMonth = sales.reduce<Record<string, { revenue: number; margin: number }>>((acc, s) => {
+    if (!acc[s.month]) acc[s.month] = { revenue: 0, margin: 0 }
     acc[s.month].revenue += s.pvp_per_pair * s.quantity
     acc[s.month].margin  += (s.pvp_per_pair - s.cost_per_pair) * s.quantity
-    acc[s.month].pairs   += s.quantity
     return acc
   }, {})
-  const months = Object.entries(byMonth).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6)
+  const months    = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).slice(-6)
   const maxMargin = Math.max(...months.map(([, v]) => v.margin), 1)
 
-  const lensLabel = (k: string) => LENS_TYPES.find(l => l.key === k)?.label ?? k
-  const matLabel  = (k: string) => MATERIALS.find(m => m.key === k)?.label ?? k
+  const filteredProds = products.filter(p =>
+    !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase())
+  )
 
   return (
     <AppShell>
@@ -108,13 +160,27 @@ export default function DashboardPage() {
           </button>
         </div>
 
+        {/* MESSAGE NOTIFICATION BANNER */}
+        {newReplies > 0 && (
+          <Link href="/contacto" className="flex items-center gap-3 p-4 bg-bod-blue rounded-2xl text-white hover:bg-bod-dark transition-colors">
+            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center shrink-0">
+              <MessageSquare size={18} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Tem {newReplies} mensagem{newReplies !== 1 ? 's' : ''} respondida{newReplies !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-white/70">A equipa BOD respondeu às suas mensagens — clique para ver</p>
+            </div>
+            <span className="text-xs font-semibold text-white/80">Ver →</span>
+          </Link>
+        )}
+
         {/* KPI CARDS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { icon: Euro,      label: 'Margem bruta total',         value: fmt(totalMargin),  sub: 'acumulado',         color: 'text-green-600', bg: 'bg-green-50' },
-            { icon: TrendingUp,label: 'Faturação total (PVP)',      value: fmt(totalRevenue), sub: 'valor faturado',    color: 'text-bod-blue',  bg: 'bg-bod-light' },
-            { icon: Users,     label: 'Poupança para os clientes',  value: fmt(clientSaving), sub: 'vs. concorrência',  color: 'text-purple-600',bg: 'bg-purple-50' },
-            { icon: BarChart2, label: 'Pares vendidos',             value: totalPairs.toString(), sub: 'pares registados', color: 'text-amber-600', bg: 'bg-amber-50' },
+            { icon: Euro,       label: 'Margem bruta total',        value: fmt(totalMargin),        sub: 'acumulado',          color: 'text-green-600',  bg: 'bg-green-50' },
+            { icon: TrendingUp, label: 'Faturação total (PVP)',     value: fmt(totalRevenue),       sub: 'valor faturado',     color: 'text-bod-blue',   bg: 'bg-bod-light' },
+            { icon: Users,      label: 'Poupança para os clientes', value: fmt(clientSaving),       sub: 'vs. concorrência',   color: 'text-purple-600', bg: 'bg-purple-50' },
+            { icon: BarChart2,  label: 'Pares vendidos',            value: totalPairs.toString(),   sub: 'pares registados',   color: 'text-amber-600',  bg: 'bg-amber-50' },
           ].map(c => (
             <div key={c.label} className="card p-4 md:p-5">
               <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
@@ -127,20 +193,19 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* MARGIN BAR CHART */}
+        {/* CHART */}
         {months.length > 0 && (
           <div className="card p-5 md:p-6">
             <h2 className="font-semibold text-sm text-bod-dark mb-5">Margem bruta por mês</h2>
             <div className="flex items-end gap-3 h-32">
-              {months.reverse().map(([month, v]) => {
-                const pct = (v.margin / maxMargin) * 100
+              {months.map(([month, v]) => {
+                const pct   = (v.margin / maxMargin) * 100
                 const label = new Date(month + '-01').toLocaleDateString('pt-PT', { month: 'short', year: '2-digit' })
                 return (
                   <div key={month} className="flex-1 flex flex-col items-center gap-1.5">
                     <span className="text-xs text-gray-400 font-medium hidden md:block">{fmt(v.margin)}</span>
                     <div className="w-full flex items-end justify-center" style={{ height: '80px' }}>
-                      <div className="w-full bg-bod-blue rounded-t-lg transition-all"
-                        style={{ height: `${Math.max(pct, 4)}%` }} />
+                      <div className="w-full bg-bod-blue rounded-t-lg transition-all" style={{ height: `${Math.max(pct, 4)}%` }} />
                     </div>
                     <span className="text-xs text-gray-400 font-medium">{label}</span>
                   </div>
@@ -150,20 +215,20 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ADVANTAGE BREAKDOWN */}
+        {/* BOTTOM GRID */}
         <div className="grid md:grid-cols-2 gap-4">
+          {/* Vantagem */}
           <div className="card p-5">
             <h2 className="font-semibold text-sm text-bod-dark mb-4">A sua vantagem BOD</h2>
             <div className="space-y-3">
               {[
-                { label: 'Custo total BOD', value: fmt(totalCost), color: 'bg-bod-blue' },
-                { label: 'Estimativa concorrência', value: fmt(competitorEst), color: 'bg-gray-200' },
-                { label: 'Poupança para os clientes', value: fmt(clientSaving), color: 'bg-purple-400' },
-                { label: 'Margem bruta gerada', value: fmt(totalMargin), color: 'bg-green-400' },
+                { label: 'Custo total BOD',            value: fmt(totalCost),    dot: 'bg-bod-blue' },
+                { label: 'Poupança estimada clientes',  value: fmt(clientSaving), dot: 'bg-purple-400' },
+                { label: 'Margem bruta gerada',         value: fmt(totalMargin),  dot: 'bg-green-400' },
               ].map(r => (
                 <div key={r.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2.5 h-2.5 rounded-full ${r.color}`} />
+                    <div className={`w-2.5 h-2.5 rounded-full ${r.dot}`} />
                     <span className="text-sm text-gray-500">{r.label}</span>
                   </div>
                   <span className="text-sm font-semibold text-bod-dark">{r.value}</span>
@@ -177,7 +242,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-sm text-bod-dark mb-4">Últimas vendas registadas</h2>
             {sales.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-sm text-gray-300">Sem vendas registadas ainda.</p>
+                <p className="text-sm text-gray-300">Sem vendas registadas.</p>
                 <button className="btn-outline mt-3 text-xs py-2" onClick={() => setShowAdd(true)}>
                   <Plus size={13} /> Registar primeira venda
                 </button>
@@ -187,8 +252,8 @@ export default function DashboardPage() {
                 {sales.slice(0, 6).map(s => (
                   <div key={s.id} className="flex items-center justify-between py-2 border-b border-bod-light last:border-0">
                     <div>
-                      <p className="text-sm font-medium text-bod-dark">{lensLabel(s.lens_type)}</p>
-                      <p className="text-xs text-gray-400">{matLabel(s.material)} · {s.quantity} par{s.quantity > 1 ? 'es' : ''}</p>
+                      <p className="text-sm font-medium text-bod-dark">{s.lens_type}</p>
+                      <p className="text-xs text-gray-400">{s.material ? `${s.material} · ` : ''}{s.quantity} par{s.quantity > 1 ? 'es' : ''}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
@@ -205,51 +270,135 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* ADD SALE MODAL */}
-        {showAdd && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4"
-            onClick={() => setShowAdd(false)}>
-            <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-6 space-y-4"
-              onClick={e => e.stopPropagation()}>
-              <h3 className="font-display font-bold text-lg text-bod-dark">Registar venda</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Tipo de lente</label>
-                  <select className="input" value={ns.lens_type} onChange={e => setNs(p => ({ ...p, lens_type: e.target.value }))}>
-                    {LENS_TYPES.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Material</label>
-                  <select className="input" value={ns.material} onChange={e => setNs(p => ({ ...p, material: e.target.value as MatKey }))}>
-                    {MATERIALS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Quantidade</label>
-                  <input type="number" min="1" className="input" value={ns.quantity}
-                    onChange={e => setNs(p => ({ ...p, quantity: parseInt(e.target.value) || 1 }))} />
-                </div>
-                <div>
-                  <label className="label">Margem (%)</label>
-                  <input type="number" min="0" className="input" value={ns.margin_pct}
-                    onChange={e => setNs(p => ({ ...p, margin_pct: parseFloat(e.target.value) || 0 }))} />
-                </div>
+      {/* ADD SALE MODAL */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4"
+          onClick={() => { setShowAdd(false); resetSaleForm() }}>
+          <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Modal header */}
+            <div className="sticky top-0 bg-white px-5 pt-5 pb-4 border-b border-bod-light rounded-t-3xl md:rounded-t-2xl flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-bold text-lg text-bod-dark">Registar venda</h3>
+                {saleLensType && <p className="text-xs text-gray-400 mt-0.5">{saleLensType}{selectedProd ? ` · ${selectedProd.name}` : ''}</p>}
               </div>
-              <div className="bg-bod-xlight rounded-xl p-4 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Custo BOD</span><span className="font-semibold">{fmt(computedCost() * ns.quantity)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">PVP total</span><span className="font-semibold">{fmt(computedPvp() * ns.quantity)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Margem</span><span className="font-semibold text-green-600">+{fmt(computedMargin() * ns.quantity)}</span></div>
-              </div>
-              <div className="flex gap-3">
-                <button className="btn-ghost flex-1" onClick={() => setShowAdd(false)}>Cancelar</button>
-                <button className="btn-primary flex-1" onClick={addSale}>Guardar</button>
-              </div>
+              <button onClick={() => { setShowAdd(false); resetSaleForm() }} className="text-gray-300 hover:text-gray-500">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+
+              {/* STEP 1 — Tipo de lente */}
+              {saleStep === 'lensType' && (
+                <div>
+                  <p className="label mb-3">Tipo de lente</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LENS_TYPES_ORDER.map(lt => (
+                      <button key={lt}
+                        className="flex items-center justify-between px-4 py-3 rounded-xl border border-bod-light hover:border-bod-blue hover:bg-bod-xlight text-left transition-all group"
+                        onClick={() => selectLensType(lt)}>
+                        <span className="text-sm font-medium text-bod-dark">{lt}</span>
+                        <ChevronDown size={14} className="text-gray-300 group-hover:text-bod-blue -rotate-90 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2 — Produto */}
+              {saleStep === 'product' && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="label">Selecionar produto</p>
+                    <button className="text-xs text-gray-400 hover:text-bod-blue" onClick={() => setSaleStep('lensType')}>← Voltar</button>
+                  </div>
+                  <input className="input mb-3" placeholder="Pesquisar produto..."
+                    value={prodSearch} onChange={e => setProdSearch(e.target.value)} />
+                  {loadingProd ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-bod-blue border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                      {filteredProds.slice(0, 50).map(p => (
+                        <button key={p.id}
+                          className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl border border-bod-light hover:border-bod-blue hover:bg-bod-xlight text-left transition-all"
+                          onClick={() => selectProduct(p)}>
+                          <div className="flex-1 min-w-0 pr-3">
+                            <p className="text-sm font-medium text-bod-dark truncate">{p.name}</p>
+                            {p.index_val && <p className="text-xs text-gray-400">{p.index_val}</p>}
+                          </div>
+                          {p.optician_price && <span className="text-sm font-bold text-bod-blue shrink-0">{fmt(p.optician_price)}</span>}
+                        </button>
+                      ))}
+                      {filteredProds.length === 0 && <p className="text-sm text-gray-300 text-center py-6">Nenhum produto encontrado.</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 3 — Config */}
+              {saleStep === 'config' && selectedProd && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="label">Configurar venda</p>
+                    <button className="text-xs text-gray-400 hover:text-bod-blue" onClick={() => setSaleStep('product')}>← Alterar produto</button>
+                  </div>
+
+                  {/* Product info */}
+                  <div className="bg-bod-xlight rounded-xl p-4">
+                    <p className="text-xs text-gray-400 mb-1">Produto selecionado</p>
+                    <p className="text-sm font-semibold text-bod-dark leading-snug">{selectedProd.name}</p>
+                    {selectedProd.coating && <p className="text-xs text-gray-400 mt-0.5">{selectedProd.coating}</p>}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Margem ótica (%)</label>
+                      <input type="number" step="5" min="0" max="500" className="input font-semibold"
+                        value={margem} onChange={e => setMargem(parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <label className="label">Quantidade (pares)</label>
+                      <input type="number" min="1" className="input"
+                        value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} />
+                    </div>
+                  </div>
+
+                  {/* Price summary — same as calculator */}
+                  <div className="bg-bod-dark rounded-2xl p-4 space-y-2">
+                    {[
+                      { label: 'Custo BOD (par)',  value: fmt(cost),           muted: true },
+                      { label: 'PVP ao cliente',   value: fmt(pvp),            muted: false, big: true },
+                      { label: 'Margem / par',     value: '+' + fmt(margin),   muted: false, green: true },
+                      ...(quantity > 1 ? [
+                        { label: `Total custo (${quantity} pares)`, value: fmt(cost * quantity),   muted: true },
+                        { label: `Total PVP (${quantity} pares)`,   value: fmt(pvp * quantity),    muted: false },
+                        { label: 'Margem total',                    value: '+' + fmt(margin * quantity), muted: false, green: true },
+                      ] : []),
+                    ].map(r => (
+                      <div key={r.label} className="flex justify-between items-baseline">
+                        <span className="text-xs text-white/50">{r.label}</span>
+                        <span className={`font-semibold ${'big' in r && r.big ? 'text-lg text-bod-sky' : ''} ${'green' in r && r.green ? 'text-green-400 text-sm' : ''} ${r.muted ? 'text-sm text-white/70' : 'text-sm text-white'}`}>
+                          {r.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="btn-primary w-full py-3.5" onClick={addSale}>
+                    <Plus size={16} /> Guardar venda
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </AppShell>
   )
 }
