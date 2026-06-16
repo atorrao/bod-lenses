@@ -9,13 +9,14 @@ import { BRAND_IMAGES } from '@/lib/data'
 import type { Profile } from '@/lib/supabase'
 import {
   LayoutDashboard, Calculator, Package, Newspaper,
-  MessageCircle, User, LogOut, Menu, X, ChevronRight
+  MessageCircle, User, LogOut, Menu, X, ChevronRight, ShoppingBag
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/calculadora', icon: Calculator,       label: 'Calculadora' },
   { href: '/produtos',    icon: Package,          label: 'Produtos' },
+  { href: '/encomendas',  icon: ShoppingBag,      label: 'Encomendas' },
   { href: '/novidades',   icon: Newspaper,        label: 'Novidades' },
   { href: '/contacto',    icon: MessageCircle,    label: 'Contacto' },
   { href: '/perfil',      icon: User,             label: 'Perfil' },
