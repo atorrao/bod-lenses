@@ -72,8 +72,8 @@ export default function AdminVendas() {
       s.quantity,
       (s.cost_per_pair ?? 0).toFixed(2),
       (s.pvp_per_pair ?? 0).toFixed(2),
-      ((s.pvp_per_pair - s.cost_per_pair) ?? 0).toFixed(2),
-      (((s.pvp_per_pair - s.cost_per_pair) * s.quantity) ?? 0).toFixed(2),
+      (s.pvp_per_pair - s.cost_per_pair).toFixed(2),
+      ((s.pvp_per_pair - s.cost_per_pair) * s.quantity).toFixed(2),
       s.month,
       new Date(s.created_at).toLocaleString('pt-PT')
     ])
