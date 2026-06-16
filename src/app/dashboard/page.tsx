@@ -72,7 +72,7 @@ export default function DashboardPage() {
   const loadProducts = async (lensType: string) => {
     setLoadingProd(true)
     const cats = LENS_TYPE_MAP[lensType] ?? []
-    const { data } = await (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating').in('category', cats) as any).order('name').limit(500)
+    const { data } = await (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating,sales_count').in('category', cats) as any).order('name').limit(500)
     setProducts(data ?? [])
     setLoadingProd(false)
   }
@@ -117,8 +117,10 @@ export default function DashboardPage() {
     }
     await Promise.all([
       supabase.from('sales_log').insert([{ ...entry, product_id: selectedProd.id, product_name: selectedProd.name }]),
-      // Increment sales_count on the product
-      supabase.rpc('increment_product_sales_by', { p_id: selectedProd.id, p_qty: quantity }),
+      // Increment sales_count directly
+      supabase.from('products')
+        .update({ sales_count: (selectedProd.sales_count ?? 0) + quantity })
+        .eq('id', selectedProd.id),
     ])
     setShowAdd(false)
     resetSaleForm()
