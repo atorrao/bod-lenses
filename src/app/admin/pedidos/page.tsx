@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import AdminShell from '@/components/layout/AdminShell'
 import { supabase } from '@/lib/supabase'
-import { Download, Search, MessageSquare, Filter } from 'lucide-react'
+import { Download, Search, MessageSquare, Send, ChevronDown, ChevronUp } from 'lucide-react'
 
 type Message = {
   id: string
@@ -14,7 +14,15 @@ type Message = {
   subject: string
   message: string
   status: string
-  optica_id: string
+  replies?: Reply[]
+}
+
+type Reply = {
+  id: string
+  created_at: string
+  author: string
+  author_name: string
+  body: string
 }
 
 type Request = {
@@ -32,25 +40,47 @@ type Request = {
 
 type ActiveTab = 'mensagens' | 'pedidos'
 
-export default function AdminPedidos() {
-  const [activeTab, setActiveTab]   = useState<ActiveTab>('mensagens')
-  const [messages,  setMessages]    = useState<Message[]>([])
-  const [requests,  setRequests]    = useState<Request[]>([])
-  const [search,    setSearch]      = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  new:       { label: 'Enviada',     color: 'bg-gray-100 text-gray-500' },
+  read:      { label: 'Lida',        color: 'bg-blue-100 text-blue-600' },
+  analysis:  { label: 'Em análise',  color: 'bg-yellow-100 text-yellow-600' },
+  forwarded: { label: 'Encaminhada', color: 'bg-purple-100 text-purple-600' },
+  replied:   { label: 'Respondida',  color: 'bg-green-100 text-green-700' },
+  resolved:  { label: 'Resolvida',   color: 'bg-teal-100 text-teal-700' },
+}
+
+const STATUS_ORDER = ['new','read','analysis','forwarded','replied','resolved']
+
+export default function AdminComunicacoes() {
+  const [activeTab,     setActiveTab]     = useState<ActiveTab>('mensagens')
+  const [messages,      setMessages]      = useState<Message[]>([])
+  const [requests,      setRequests]      = useState<Request[]>([])
+  const [search,        setSearch]        = useState('')
+  const [filterStatus,  setFilterStatus]  = useState('')
   const [filterSubject, setFilterSubject] = useState('')
-  const [expanded,  setExpanded]    = useState<string | null>(null)
+  const [expanded,      setExpanded]      = useState<string | null>(null)
+  const [replyText,     setReplyText]     = useState<Record<string, string>>({})
+  const [sendingReply,  setSendingReply]  = useState<string | null>(null)
 
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     const [{ data: msgs }, { data: reqs }] = await Promise.all([
       supabase.from('contact_messages').select('*').order('created_at', { ascending: false }),
       supabase.from('access_requests').select('*').order('created_at', { ascending: false }),
     ])
-    setMessages(msgs ?? [])
+
+    // Load replies for all messages
+    const msgsWithReplies = await Promise.all((msgs ?? []).map(async (m: Message) => {
+      const { data: replies } = await supabase
+        .from('message_replies').select('*')
+        .eq('message_id', m.id).order('created_at', { ascending: true })
+      return { ...m, replies: replies ?? [] }
+    }))
+
+    setMessages(msgsWithReplies)
     setRequests(reqs ?? [])
-  }
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   const setMsgStatus = async (id: string, status: string) => {
     await supabase.from('contact_messages').update({ status }).eq('id', id)
@@ -62,19 +92,31 @@ export default function AdminPedidos() {
     load()
   }
 
-  const msgStatusStyle = (s: string) => ({
-    new:     'bg-amber-100 text-amber-600',
-    read:    'bg-blue-100 text-blue-600',
-    replied: 'bg-green-100 text-green-700',
-  }[s] ?? 'bg-gray-100 text-gray-500')
+  const toggleExpand = async (msgId: string) => {
+    if (expanded === msgId) { setExpanded(null); return }
+    setExpanded(msgId)
+    const msg = messages.find(m => m.id === msgId)
+    if (msg?.status === 'new') setMsgStatus(msgId, 'read')
+  }
 
-  const msgStatusLabel = (s: string) => ({ new:'Nova', read:'Lida', replied:'Respondida' }[s] ?? s)
-
-  const reqStatusStyle = (s: string) => ({
-    pending:  'bg-amber-100 text-amber-600',
-    approved: 'bg-green-100 text-green-700',
-    rejected: 'bg-red-100 text-red-500',
-  }[s] ?? 'bg-gray-100 text-gray-500')
+  const sendReply = async (msg: Message) => {
+    const body = replyText[msg.id]
+    if (!body) return
+    setSendingReply(msg.id)
+    await supabase.from('message_replies').insert([{
+      message_id:  msg.id,
+      author:      'admin',
+      author_name: 'BOD Lenses',
+      body,
+    }])
+    // Auto-advance to replied if not already resolved
+    if (!['replied','resolved'].includes(msg.status)) {
+      await supabase.from('contact_messages').update({ status: 'replied' }).eq('id', msg.id)
+    }
+    setReplyText(prev => ({ ...prev, [msg.id]: '' }))
+    setSendingReply(null)
+    load()
+  }
 
   const subjects = Array.from(new Set(messages.map(m => m.subject))).sort()
 
@@ -86,18 +128,21 @@ export default function AdminPedidos() {
   })
 
   const filteredReqs = requests.filter(r =>
-    !search || r.optica_name?.toLowerCase().includes(search.toLowerCase()) || r.email?.toLowerCase().includes(search.toLowerCase())
+    (!search || r.optica_name?.toLowerCase().includes(search.toLowerCase()) || r.email?.toLowerCase().includes(search.toLowerCase())) &&
+    (!filterStatus || r.status === filterStatus)
   )
 
-  const exportMsgsCSV = () => {
+  const newCount     = messages.filter(m => m.status === 'new').length
+  const pendingCount = requests.filter(r => r.status === 'pending').length
+
+  const exportCSV = () => {
     const headers = ['Ótica','Nome','Email','Assunto','Mensagem','Estado','Data']
-    const rows = filteredMsgs.map(m => [m.optica, m.name, m.email, m.subject, m.message, m.status, new Date(m.created_at).toLocaleString('pt-PT')])
+    const rows = filteredMsgs.map(m => [m.optica, m.name, m.email, m.subject, m.message, STATUS_CONFIG[m.status]?.label ?? m.status, new Date(m.created_at).toLocaleString('pt-PT')])
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = 'mensagens.csv'; a.click()
   }
 
-  const newCount = messages.filter(m => m.status === 'new').length
-  const pendingCount = requests.filter(r => r.status === 'pending').length
+  const reqStatusStyle = (s: string) => ({ pending:'bg-amber-100 text-amber-600', approved:'bg-green-100 text-green-700', rejected:'bg-red-100 text-red-500' }[s] ?? 'bg-gray-100 text-gray-500')
 
   return (
     <AdminShell>
@@ -108,7 +153,7 @@ export default function AdminPedidos() {
             <p className="text-sm text-gray-400 mt-0.5">Mensagens e pedidos de acesso</p>
           </div>
           {activeTab === 'mensagens' && (
-            <button className="btn-outline shrink-0" onClick={exportMsgsCSV}>
+            <button className="btn-outline shrink-0" onClick={exportCSV}>
               <Download size={15} /> Exportar CSV
             </button>
           )}
@@ -140,9 +185,7 @@ export default function AdminPedidos() {
             <>
               <select className="input sm:w-44" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                 <option value="">Todos os estados</option>
-                <option value="new">Novas</option>
-                <option value="read">Lidas</option>
-                <option value="replied">Respondidas</option>
+                {STATUS_ORDER.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
               </select>
               <select className="input sm:w-56" value={filterSubject} onChange={e => setFilterSubject(e.target.value)}>
                 <option value="">Todos os assuntos</option>
@@ -166,48 +209,101 @@ export default function AdminPedidos() {
             {filteredMsgs.length === 0 && (
               <div className="card p-10 text-center text-gray-300 text-sm">Nenhuma mensagem encontrada.</div>
             )}
-            {filteredMsgs.map(m => (
-              <div key={m.id} className={`card p-5 cursor-pointer hover:shadow-sm transition-shadow ${m.status === 'new' ? 'border-l-4 border-l-amber-400' : ''}`}
-                onClick={() => { setExpanded(expanded === m.id ? null : m.id); if (m.status === 'new') setMsgStatus(m.id, 'read') }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <p className="text-sm font-bold text-bod-dark">{m.optica || m.name}</p>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${msgStatusStyle(m.status)}`}>{msgStatusLabel(m.status)}</span>
-                      <span className="text-xs bg-bod-light text-bod-blue font-semibold px-2 py-0.5 rounded-full">{m.subject}</span>
+            {filteredMsgs.map(m => {
+              const st = STATUS_CONFIG[m.status] ?? STATUS_CONFIG.new
+              const isOpen = expanded === m.id
+              return (
+                <div key={m.id} className={`card overflow-hidden ${m.status === 'new' ? 'border-l-4 border-l-amber-400' : ''}`}>
+                  {/* Header */}
+                  <div className="px-4 py-3.5 flex items-start justify-between gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => toggleExpand(m.id)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <p className="text-sm font-bold text-bod-dark">{m.optica || m.name}</p>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+                        <span className="text-xs bg-bod-light text-bod-blue font-semibold px-2 py-0.5 rounded-full">{m.subject}</span>
+                        {(m.replies?.length ?? 0) > 0 && (
+                          <span className="text-xs text-gray-400">{m.replies!.length} resposta{m.replies!.length !== 1 ? 's' : ''}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400">{new Date(m.created_at).toLocaleString('pt-PT')} · {m.email}</p>
                     </div>
-                    <p className={`text-sm text-gray-500 ${expanded === m.id ? '' : 'line-clamp-2'}`}>{m.message}</p>
-                    <p className="text-xs text-gray-300 mt-2">{new Date(m.created_at).toLocaleString('pt-PT')} · {m.email}</p>
+                    {isOpen ? <ChevronUp size={16} className="text-gray-400 shrink-0 mt-1" /> : <ChevronDown size={16} className="text-gray-400 shrink-0 mt-1" />}
                   </div>
+
+                  {isOpen && (
+                    <div className="border-t border-gray-100">
+                      {/* Original message */}
+                      <div className="px-4 py-3 bg-gray-50">
+                        <p className="text-xs font-bold text-gray-400 mb-1">Mensagem original</p>
+                        <p className="text-sm text-gray-600 leading-relaxed">{m.message}</p>
+                      </div>
+
+                      {/* Reply thread */}
+                      {(m.replies?.length ?? 0) > 0 && (
+                        <div className="px-4 py-3 space-y-3">
+                          {m.replies!.map(r => (
+                            <div key={r.id} className={`flex gap-3 ${r.author === 'admin' ? 'flex-row-reverse' : ''}`}>
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${r.author === 'admin' ? 'bg-bod-blue text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                {r.author === 'admin' ? 'B' : 'O'}
+                              </div>
+                              <div className={`flex-1 rounded-xl p-3 text-sm leading-relaxed ${r.author === 'admin' ? 'bg-bod-light text-bod-dark' : 'bg-gray-100 text-gray-600'}`}>
+                                <p className="text-xs font-semibold mb-1 text-gray-400">{r.author_name} · {new Date(r.created_at).toLocaleString('pt-PT')}</p>
+                                {r.body}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Status + Reply */}
+                      <div className="px-4 py-3 border-t border-gray-100 space-y-3">
+                        {/* Status buttons */}
+                        <div className="flex flex-wrap gap-1.5">
+                          <p className="text-xs text-gray-400 font-medium w-full mb-1">Estado:</p>
+                          {STATUS_ORDER.map(s => (
+                            <button key={s}
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${m.status === s ? STATUS_CONFIG[s].color : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                              onClick={() => setMsgStatus(m.id, s)}>
+                              {STATUS_CONFIG[s].label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Reply input */}
+                        {m.status !== 'resolved' && (
+                          <div className="flex gap-2">
+                            <input
+                              className="input flex-1 text-sm"
+                              placeholder="Escrever resposta..."
+                              value={replyText[m.id] ?? ''}
+                              onChange={e => setReplyText(prev => ({ ...prev, [m.id]: e.target.value }))}
+                              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendReply(m)}
+                            />
+                            <button
+                              className="btn-primary px-3 shrink-0"
+                              onClick={() => sendReply(m)}
+                              disabled={sendingReply === m.id || !replyText[m.id]}>
+                              <Send size={15} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {expanded === m.id && (
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-bod-light">
-                    {['new','read','replied'].map(s => (
-                      <button key={s}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${m.status === s ? msgStatusStyle(s) : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                        onClick={e => { e.stopPropagation(); setMsgStatus(m.id, s) }}>
-                        {msgStatusLabel(s)}
-                      </button>
-                    ))}
-                    <a href={`mailto:${m.email}?subject=Re: ${m.subject}`}
-                      className="ml-auto text-xs font-semibold text-bod-blue hover:underline flex items-center gap-1"
-                      onClick={e => e.stopPropagation()}>
-                      Responder por email →
-                    </a>
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
         {/* REQUESTS */}
         {activeTab === 'pedidos' && (
           <div className="space-y-3">
-            {filteredReqs.filter(r => !filterStatus || r.status === filterStatus).length === 0 && (
+            {filteredReqs.length === 0 && (
               <div className="card p-10 text-center text-gray-300 text-sm">Nenhum pedido encontrado.</div>
             )}
-            {filteredReqs.filter(r => !filterStatus || r.status === filterStatus).map(r => (
+            {filteredReqs.map(r => (
               <div key={r.id} className="card p-5">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex-1 space-y-1">
