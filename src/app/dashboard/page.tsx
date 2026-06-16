@@ -106,16 +106,20 @@ export default function DashboardPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session || !selectedProd) return
     const entry: SaleEntry = {
-      optica_id:     session.user.id,
-      lens_type:     saleLensType,
-      material:      selectedProd.index_val ?? '',
+      optica_id:      session.user.id,
+      lens_type:      saleLensType,
+      material:       selectedProd.index_val ?? '',
       quantity,
       cost_per_pair:  cost,
       pvp_per_pair:   pvp,
       margin_pct:     margem,
       month:          currentMonth(),
     }
-    await supabase.from('sales_log').insert([entry])
+    await Promise.all([
+      supabase.from('sales_log').insert([{ ...entry, product_id: selectedProd.id, product_name: selectedProd.name }]),
+      // Increment sales_count on the product
+      supabase.rpc('increment_product_sales_by', { p_id: selectedProd.id, p_qty: quantity }),
+    ])
     setShowAdd(false)
     resetSaleForm()
     load()
