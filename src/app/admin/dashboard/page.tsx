@@ -35,7 +35,8 @@ export default function AdminDashboard() {
     const pending    = (oticas ?? []).filter((o: any) => o.status === 'pending').length
     const revenue    = (sales ?? []).reduce((a: number, s: any) => a + s.pvp_per_pair * s.quantity, 0)
     const margin     = (sales ?? []).reduce((a: number, s: any) => a + (s.pvp_per_pair - s.cost_per_pair) * s.quantity, 0)
-    const newMsgs    = (messages ?? []).filter((m: any) => m.status === 'new').length
+    // Count messages that need attention: new or read (not yet in analysis/forwarded/replied/resolved)
+    const newMsgs    = (messages ?? []).filter((m: any) => m.status === 'new' || m.status === 'read').length
 
     setStats({
       totalOticas: (oticas ?? []).length,
@@ -68,8 +69,8 @@ export default function AdminDashboard() {
                   <MessageSquare size={18} className="text-amber-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-amber-800">{stats.newMessages} nova{stats.newMessages !== 1 ? 's' : ''} mensagem{stats.newMessages !== 1 ? 's' : ''}</p>
-                  <p className="text-xs text-amber-600">A aguardar resposta — clique para ver</p>
+                  <p className="text-sm font-semibold text-amber-800">{stats.newMessages} mensagem{stats.newMessages !== 1 ? 's' : ''} a aguardar resposta</p>
+                  <p className="text-xs text-amber-600">Novas ou lidas sem resposta ainda</p>
                 </div>
                 <span className="w-6 h-6 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0">{stats.newMessages}</span>
               </Link>
