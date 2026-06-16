@@ -48,17 +48,20 @@ export default function DashboardPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    const [{ data: prof }, { data: sl }, { data: msgs }] = await Promise.all([
+    const [{ data: prof }, { data: sl }, { data: msgs }, { data: replies }] = await Promise.all([
       supabase.from('optica_profiles').select('*').eq('id', session.user.id).single(),
       supabase.from('sales_log').select('*').eq('optica_id', session.user.id).order('created_at', { ascending: false }),
       supabase.from('contact_messages').select('id, status').eq('optica_id', session.user.id),
+      supabase.from('message_replies').select('message_id').eq('author', 'admin'),
     ])
     setProfile(prof)
     setSales(sl ?? [])
 
-    // Count messages with BOD replies (status = replied)
-    const repliedCount = (msgs ?? []).filter((m: any) => m.status === 'replied').length
-    setNewReplies(repliedCount)
+    // Show banner when any of the optica's messages have a BOD reply
+    const msgIds = (msgs ?? []).map((m: any) => m.id)
+    const repliedMsgIds = new Set((replies ?? []).map((r: any) => r.message_id))
+    const countWithReplies = msgIds.filter((id: string) => repliedMsgIds.has(id)).length
+    setNewReplies(countWithReplies)
 
     setLoading(false)
   }, [])
@@ -167,8 +170,8 @@ export default function DashboardPage() {
               <MessageSquare size={18} className="text-white" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold">Tem {newReplies} mensagem{newReplies !== 1 ? 's' : ''} respondida{newReplies !== 1 ? 's' : ''}</p>
-              <p className="text-xs text-white/70">A equipa BOD respondeu às suas mensagens — clique para ver</p>
+              <p className="text-sm font-semibold">A equipa BOD respondeu às suas mensagens</p>
+              <p className="text-xs text-white/70">{newReplies} mensagem{newReplies !== 1 ? 's' : ''} com resposta — clique para ver</p>
             </div>
             <span className="text-xs font-semibold text-white/80">Ver →</span>
           </Link>
