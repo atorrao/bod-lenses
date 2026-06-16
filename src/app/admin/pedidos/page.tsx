@@ -130,7 +130,7 @@ export default function AdminPedidos() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input className="input pl-10" placeholder={activeTab === 'mensagens' ? 'Pesquisar por ótica, assunto...' : 'Pesquisar por ótica, email...'}
