@@ -9,16 +9,13 @@ import { TrendingUp, Euro, Users, Plus, Trash2, BarChart2, MessageSquare, Bell, 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-// ── Same cascade types as calculator ───────────────────────
+// ── Only 3 main lens types ───────────────────────────────────
 const LENS_TYPE_MAP: Record<string, string[]> = {
-  'Monofocal':        ['RX MONOFOCAL','STOCK NANO BASIC','STOCK NANO LONGUS','STOCK NANO BLUELINE','STOCK NANO ACHROMATIC','STOCK NANO SOLIS','STOCK BLUE420'],
-  'Progressiva':      ['RX PROGRESSIVA'],
-  'Bifocal':          ['RX BIFOCAL'],
-  'Coloração / Tint': ['RX COLORAÇÃO/TINT','STOCK NANO TINTING'],
-  'Fotocromática':    ['STOCK NANO TRANS GENS','STOCK TRANS XTRA'],
-  'Suplementos':      ['SUPLEMENTOS'],
+  'Monofocal':   ['RX MONOFOCAL','STOCK NANO BASIC','STOCK NANO LONGUS','STOCK NANO BLUELINE','STOCK NANO ACHROMATIC','STOCK NANO SOLIS','STOCK BLUE420'],
+  'Progressiva': ['RX PROGRESSIVA'],
+  'Bifocal':     ['RX BIFOCAL'],
 }
-const LENS_TYPES_ORDER = ['Monofocal','Progressiva','Bifocal','Coloração / Tint','Fotocromática','Suplementos']
+const LENS_TYPES_ORDER = ['Monofocal', 'Progressiva', 'Bifocal']
 
 type SaleStep = 'lensType' | 'product' | 'config'
 
@@ -69,10 +66,12 @@ export default function DashboardPage() {
   useEffect(() => { load() }, [load])
 
   // Load products for selected lens type
-  const loadProducts = async (lensType: string) => {
+  const loadProducts = async (lensType: string, search: string = '') => {
     setLoadingProd(true)
     const cats = LENS_TYPE_MAP[lensType] ?? []
-    const { data } = await (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating,sales_count').in('category', cats) as any).order('name').limit(500)
+    let q = (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating,sales_count').in('category', cats) as any).order('name').limit(100)
+    if (search) q = q.ilike('name', `%${search}%`)
+    const { data } = await q
     setProducts(data ?? [])
     setLoadingProd(false)
   }
@@ -82,8 +81,6 @@ export default function DashboardPage() {
     await loadProducts(lt)
     setSaleStep('product')
   }
-
-  const selectProduct = (p: any) => {
     setSelectedProd(p)
     setSaleStep('config')
   }
@@ -326,14 +323,14 @@ export default function DashboardPage() {
                     <button className="text-xs text-gray-400 hover:text-bod-blue" onClick={() => setSaleStep('lensType')}>← Voltar</button>
                   </div>
                   <input className="input mb-3" placeholder="Pesquisar produto..."
-                    value={prodSearch} onChange={e => setProdSearch(e.target.value)} />
+                    value={prodSearch} onChange={e => { setProdSearch(e.target.value); loadProducts(saleLensType, e.target.value) }} />
                   {loadingProd ? (
                     <div className="flex items-center justify-center py-8">
                       <div className="w-6 h-6 border-2 border-bod-blue border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (
                     <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                      {filteredProds.slice(0, 50).map(p => (
+                      {products.map(p => (
                         <button key={p.id}
                           className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl border border-bod-light hover:border-bod-blue hover:bg-bod-xlight text-left transition-all"
                           onClick={() => selectProduct(p)}>
