@@ -81,6 +81,8 @@ export default function DashboardPage() {
     await loadProducts(lt)
     setSaleStep('product')
   }
+
+  const selectProduct = (p: any) => {
     setSelectedProd(p)
     setSaleStep('config')
   }
