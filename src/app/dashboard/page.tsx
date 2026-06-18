@@ -69,7 +69,16 @@ export default function DashboardPage() {
   const loadProducts = async (lensType: string, search: string = '') => {
     setLoadingProd(true)
     const cats = LENS_TYPE_MAP[lensType] ?? []
-    let q = (supabase.from('products').select('id,name,optician_price,pvpr,category,index_val,coating,sales_count').in('category', cats) as any).order('name').limit(100)
+    // For large categories (progressiva), require at least 3 chars to search
+    if (!search && lensType === 'Progressiva') {
+      setProducts([])
+      setLoadingProd(false)
+      return
+    }
+    let q = (supabase.from('products')
+      .select('id,name,optician_price,pvpr,category,index_val,coating,sales_count')
+      .in('category', cats) as any)
+      .order('name').limit(80)
     if (search) q = q.ilike('name', `%${search}%`)
     const { data } = await q
     setProducts(data ?? [])
@@ -332,7 +341,14 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                      {products.map(p => (
+                      {products.length === 0 && prodSearch.length === 0 && saleLensType === 'Progressiva' ? (
+                        <div className="text-center py-6">
+                          <p className="text-sm text-gray-400">Pesquise pelo nome, design ou índice</p>
+                          <p className="text-xs text-gray-300 mt-1">ex: "Natura H", "Compass", "1.67"</p>
+                        </div>
+                      ) : products.length === 0 ? (
+                        <p className="text-sm text-gray-300 text-center py-6">Nenhum produto encontrado.</p>
+                      ) : products.map(p => (
                         <button key={p.id}
                           className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl border border-bod-light hover:border-bod-blue hover:bg-bod-xlight text-left transition-all"
                           onClick={() => selectProduct(p)}>
@@ -343,7 +359,6 @@ export default function DashboardPage() {
                           {p.optician_price && <span className="text-sm font-bold text-bod-blue shrink-0">{fmt(p.optician_price)}</span>}
                         </button>
                       ))}
-                      {filteredProds.length === 0 && <p className="text-sm text-gray-300 text-center py-6">Nenhum produto encontrado.</p>}
                     </div>
                   )}
                 </div>
