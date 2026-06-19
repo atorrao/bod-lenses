@@ -88,7 +88,24 @@ export default function AdminComunicacoes() {
   }
 
   const setReqStatus = async (id: string, status: string) => {
-    await supabase.from('access_requests').update({ status }).eq('id', id)
+    if (status === 'approved') {
+      // Call Edge Function to create user + send magic link
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/approve-optica`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ request_id: id }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        alert(`Erro ao aprovar: ${result.error}`)
+        return
+      }
+    } else {
+      await supabase.from('access_requests').update({ status }).eq('id', id)
+    }
     load()
   }
 
